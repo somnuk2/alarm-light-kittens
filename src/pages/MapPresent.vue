@@ -1,110 +1,187 @@
 <template>
-  <div class="page-wrapper">
-    <div class="container">
-      <h1>แผนที่ระบุตำแหน่งอาคาร (Northern Thailand)</h1>
-      <p class="subtitle">โรงเรียนวารีเชียงใหม่ - การศึกษาเพื่ออนาคตก้าวไกล</p>
+  <q-page class="q-pa-md bg-grey-2">
+    <div class="row justify-center">
+      <div class="col-12 col-lg-10">
+        <h1 class="text-h4 text-center text-weight-bold q-mb-xs text-primary">แผนที่ระบุตำแหน่งอาคาร</h1>
+        <p class="text-subtitle1 text-center text-grey-7 q-mb-lg">โรงเรียนวารีเชียงใหม่ (Northern Thailand)</p>
 
-      <!-- Controls Section -->
-      <div class="controls">
-        <div class="control-group">
-          <label>ชื่อสถานที่ / อาคาร</label>
-          <input
-            v-model="placeName"
-            type="text"
-            class="input-field"
-            placeholder="เช่น อาคารที่ 1"
-          />
-        </div>
+        <!-- Controls Section -->
+        <q-card class="my-card q-mb-md">
+          <q-card-section class="bg-blue-grey-1">
+            <div class="row q-col-gutter-md items-end">
+              <!-- Place Name -->
+              <div class="col-12 col-md-3">
+                <q-input
+                  v-model="placeName"
+                  label="ชื่อสถานที่ / อาคาร"
+                  placeholder="เช่น อาคารที่ 1"
+                  outlined
+                  dense
+                  bg-color="white"
+                />
+              </div>
 
-        <div class="control-group">
-          <label>Latitude</label>
-          <input
-            v-model.number="lat"
-            type="number"
-            step="0.000001"
-            class="input-field"
-            placeholder="18.758769"
-          />
-        </div>
+              <!-- Lat -->
+              <div class="col-6 col-md-2">
+                <q-input
+                  v-model.number="lat"
+                  type="number"
+                  label="Latitude"
+                  placeholder="18.xxxx"
+                  outlined
+                  dense
+                  bg-color="white"
+                  step="0.000001"
+                />
+              </div>
 
-        <div class="control-group">
-          <label>Longitude</label>
-          <input
-            v-model.number="lng"
-            type="number"
-            step="0.000001"
-            class="input-field"
-            placeholder="99.014645"
-          />
-        </div>
+              <!-- Lng -->
+              <div class="col-6 col-md-2">
+                <q-input
+                  v-model.number="lng"
+                  type="number"
+                  label="Longitude"
+                  placeholder="99.xxxx"
+                  outlined
+                  dense
+                  bg-color="white"
+                  step="0.000001"
+                />
+              </div>
 
-        <div class="control-group">
-          <label>ที่อยู่ (Geocoding)</label>
-          <input
-            v-model="address"
-            type="text"
-            class="input-field"
-            placeholder="เช่น โรงเรียนวารี"
-          />
-        </div>
+               <!-- Address -->
+              <div class="col-12 col-md-3">
+                <q-input
+                  v-model="address"
+                  label="ค้นหาพิกัด (Geocoding)"
+                  placeholder="เช่น โรงเรียนวารี"
+                  outlined
+                  dense
+                  bg-color="white"
+                  @keyup.enter="handleGeocode"
+                />
+              </div>
 
-        <button @click="handleGeocode" :disabled="isGeocoding" class="btn btn-primary">
-          {{ isGeocoding ? 'กำลังค้นหา...' : 'ค้นหาพิกัด' }}
-        </button>
-        <button @click="handleAddMarker" class="btn btn-success">เพิ่ม Marker</button>
-        <button @click="handleResetForm" class="btn btn-secondary">ล้างฟอร์ม</button>
-      </div>
+              <!-- Button Group -->
+              <div class="col-12 col-md-auto row q-gutter-sm">
+                <q-btn
+                  unelevated
+                  color="secondary"
+                  icon="search"
+                  @click="handleGeocode"
+                  :loading="isGeocoding"
+                  round
+                  dense
+                >
+                  <q-tooltip>ค้นหาพิกัด</q-tooltip>
+                </q-btn>
 
-      <!-- Result Message -->
-      <div class="result-box">
-        <p v-if="resultMessage">{{ resultMessage }}</p>
-        <p v-else>คลิกบนแผนที่ หรือใช้ฟอร์มเพื่อเพิ่ม Marker</p>
-      </div>
+                <q-btn
+                  unelevated
+                  color="positive"
+                  icon="add"
+                  label="เพิ่ม"
+                  @click="handleAddMarker"
+                />
 
-      <!-- Map Container -->
-      <div class="map-wrapper">
-        <div ref="mapContainer" id="map" class="map-container"></div>
-        <div class="legend">
-          <div class="legend-item">
-            <div class="legend-marker"></div>
-            <span>ตำแหน่ง Marker</span>
+                 <q-btn
+                  outline
+                  color="grey"
+                  icon="refresh"
+                  @click="handleResetForm"
+                  round
+                  dense
+                >
+                  <q-tooltip>ล้างค่า</q-tooltip>
+                </q-btn>
+              </div>
+            </div>
+          </q-card-section>
+
+          <!-- Result Message -->
+          <q-separator />
+          <q-banner v-if="resultMessage" dense class="bg-blue-1 text-primary">
+            <template v-slot:avatar>
+              <q-icon name="info" color="primary" />
+            </template>
+            {{ resultMessage }}
+          </q-banner>
+        </q-card>
+
+        <div class="row q-col-gutter-md">
+          <!-- Map Container -->
+          <div class="col-12 col-md-9 order-last order-md-first">
+             <q-card class="shadow-2">
+               <div ref="mapContainer" id="map" style="height: 600px; width: 100%;"></div>
+               <q-card-section class="q-py-sm">
+                 <div class="row items-center q-gutter-md text-caption text-grey-8">
+                   <div class="flex items-center">
+                     <div style="width: 12px; height: 12px; border-radius: 50%; background: #10b981; margin-right: 6px;"></div>
+                     ตำแหน่ง Marker
+                   </div>
+                   <div class="flex items-center">
+                      <div style="width: 30px; height: 4px; border-radius: 2px; background: #2563eb; margin-right: 6px;"></div>
+                     ข้อมูล Popup
+                   </div>
+                 </div>
+               </q-card-section>
+             </q-card>
           </div>
-          <div class="legend-item">
-            <div class="legend-popup"></div>
-            <span>ข้อมูลโดยเมาส์ชี้</span>
-          </div>
-        </div>
-      </div>
 
-      <!-- Marker List -->
-      <div class="marker-list-section">
-        <h3>รายการ Marker ที่มีอยู่ ({{ markerNames.length }})</h3>
-        <div class="marker-list">
-          <div v-if="markerNames.length === 0" class="empty-state">
-            ยังไม่มี Marker
+          <!-- Marker List -->
+          <div class="col-12 col-md-3 order-first order-md-last">
+            <q-card class="fit">
+              <q-card-section>
+                 <div class="text-subtitle1 text-weight-bold q-mb-sm">
+                  Marker List ({{ markerNames.length }})
+                </div>
+                <q-scroll-area style="height: 540px;">
+                  <q-list separator class="rounded-borders">
+                     <q-item v-if="markerNames.length === 0">
+                      <q-item-section class="text-center text-grey text-italic">
+                        ยังไม่มี Marker
+                      </q-item-section>
+                    </q-item>
+                    <q-item
+                      v-for="name in markerNames"
+                      :key="name"
+                      clickable
+                      v-ripple
+                      @click="handleMarkerListClick(name)"
+                    >
+                      <q-item-section avatar min-width="0">
+                        <q-icon name="place" color="green" size="sm" />
+                      </q-item-section>
+                      <q-item-section>
+                        <q-item-label class="text-weight-medium">{{ name }}</q-item-label>
+                        <q-item-label caption class="text-xs">
+                           {{ markerIndex[name].lat.toFixed(4) }}, {{ markerIndex[name].lng.toFixed(4) }}
+                        </q-item-label>
+                      </q-item-section>
+                    </q-item>
+                  </q-list>
+                </q-scroll-area>
+              </q-card-section>
+            </q-card>
           </div>
-          <button
-            v-for="name in markerNames"
-            :key="name"
-            @click="handleMarkerListClick(name)"
-            class="marker-item"
-          >
-            <span class="marker-name">{{ name }}</span>
-            <span class="marker-coords">
-              {{ markerIndex[name].lat.toFixed(4) }}, {{ markerIndex[name].lng.toFixed(4) }}
-            </span>
-          </button>
         </div>
+
       </div>
     </div>
-  </div>
+  </q-page>
 </template>
 
 <script>
 import L from 'leaflet';
+import { useQuasar } from 'quasar';
 
 export default {
   name: 'MapPresent',
+  setup() {
+    return {
+      q: useQuasar()
+    }
+  },
   data() {
     return {
       placeName: '',
@@ -208,7 +285,9 @@ export default {
         marker.on('click', () => {
           marker.openPopup();
         });
-        this.$set(this.markerIndex, key, { marker, lat, lng });
+        // this.$set is Vue 2, Vue 3 doesn't need it for reactive objects usually, but if markerIndex is initialized in data() it is reactive.
+        // However, adding new property to object in Vue 3 is reactive by default if object is reactive.
+        this.markerIndex[key] = { marker, lat, lng };
       }
 
       this.fitMapToAllMarkers();
@@ -276,7 +355,7 @@ export default {
     async handleGeocode() {
       const addr = this.address.trim();
       if (!addr) {
-        this.resultMessage = '⚠️ กรุณากรอกที่อยู่สำหรับ Geocoding';
+        this.q.notify({ type: 'warning', message: 'กรุณากรอกที่อยู่สำหรับ Geocoding' });
         return;
       }
 
@@ -285,6 +364,7 @@ export default {
         const result = await this.geocodeAddress(addr);
         if (!result) {
           this.resultMessage = '❌ ไม่พบพิกัดจากที่อยู่นี้';
+           this.q.notify({ type: 'negative', message: 'ไม่พบพิกัดจากที่อยู่นี้' });
         } else {
           this.lat = parseFloat(result.lat.toFixed(6));
           this.lng = parseFloat(result.lng.toFixed(6));
@@ -294,6 +374,7 @@ export default {
       } catch (err) {
         console.error(err);
         this.resultMessage = '❌ เกิดข้อผิดพลาดในการค้นหา';
+        this.q.notify({ type: 'negative', message: 'เกิดข้อผิดพลาดในการค้นหา' });
       } finally {
         this.isGeocoding = false;
       }
@@ -302,12 +383,13 @@ export default {
       const name = this.placeName.trim();
 
       if (!name || isNaN(this.lat) || isNaN(this.lng)) {
-        this.resultMessage = '⚠️ กรุณากรอกข้อมูลให้ครบถ้วน';
+        this.q.notify({ type: 'warning', message: 'กรุณากรอกข้อมูลให้ครบถ้วน' });
         return;
       }
 
       this.addOrUpdateMarker(name, this.lat, this.lng, true);
       this.resultMessage = `✅ เพิ่ม Marker "${name}" สำเร็จ`;
+      this.q.notify({ type: 'positive', message: `เพิ่ม Marker "${name}" สำเร็จ` });
       this.handleResetForm();
     },
     handleResetForm() {
@@ -328,274 +410,6 @@ export default {
 </script>
 
 <style scoped>
-* {
-  box-sizing: border-box;
-}
-
-.page-wrapper {
-  margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #f5f7fb;
-  color: #222;
-}
-
-.container {
-  max-width: 1100px;
-  margin: 24px auto;
-  padding: 24px;
-  background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-}
-
-h1 {
-  margin-top: 0;
-  margin-bottom: 4px;
-  font-size: 1.5rem;
-  color: #1a202c;
-}
-
-.subtitle {
-  margin: 0 0 20px 0;
-  color: #6b7280;
-  font-size: 0.95rem;
-}
-
-/* Controls */
-.controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: flex-end;
-  margin-bottom: 16px;
-  padding: 12px 16px;
-  background: #f0f3fa;
-  border-radius: 12px;
-}
-
-.control-group {
-  display: flex;
-  flex-direction: column;
-  font-size: 0.9rem;
-  min-width: 160px;
-}
-
-.control-group label {
-  margin-bottom: 4px;
-  color: #555;
-  font-weight: 500;
-}
-
-.input-field {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid #c7d2e5;
-  font-size: 0.9rem;
-  background: #fff;
-  transition: border-color 0.2s ease;
-}
-
-.input-field:focus {
-  outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-}
-
-/* Buttons */
-.btn {
-  padding: 8px 16px;
-  border-radius: 999px;
-  border: none;
-  font-size: 0.95rem;
-  cursor: pointer;
-  font-weight: 600;
-  transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
-  white-space: nowrap;
-}
-
-.btn-primary {
-  background: #2563eb;
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
-}
-
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.5);
-  background: #1d4ed8;
-}
-
-.btn-primary:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.4);
-}
-
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-success {
-  background: #10b981;
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-}
-
-.btn-success:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5);
-  background: #059669;
-}
-
-.btn-success:active {
-  transform: translateY(0);
-  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.4);
-}
-
-.btn-secondary {
-  background: #6b7280;
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(107, 114, 128, 0.4);
-}
-
-.btn-secondary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(107, 114, 128, 0.5);
-  background: #4b5563;
-}
-
-.btn-secondary:active {
-  transform: translateY(0);
-  box-shadow: 0 3px 10px rgba(107, 114, 128, 0.4);
-}
-
-/* Result Box */
-.result-box {
-  margin-top: 12px;
-  padding: 12px 16px;
-  border-radius: 10px;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  font-size: 0.95rem;
-  line-height: 1.5;
-  color: #1e40af;
-}
-
-.result-box p {
-  margin: 0;
-}
-
-/* Map */
-.map-wrapper {
-  margin-top: 20px;
-  padding: 16px;
-  border-radius: 14px;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-}
-
-.map-container {
-  height: 550px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #ffffff;
-}
-
-/* Legend */
-.legend {
-  margin-top: 12px;
-  font-size: 0.85rem;
-  color: #6b7280;
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 0 4px;
-}
-
-.legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.legend-marker {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.legend-popup {
-  width: 30px;
-  height: 3px;
-  border-radius: 999px;
-  background: #2563eb;
-}
-
-/* Marker List */
-.marker-list-section {
-  margin-top: 24px;
-  padding: 16px;
-  background: #f9fafb;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
-}
-
-.marker-list-section h3 {
-  margin-top: 0;
-  margin-bottom: 12px;
-  font-size: 1rem;
-  color: #1a202c;
-}
-
-.marker-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.empty-state {
-  padding: 16px;
-  text-align: center;
-  color: #9ca3af;
-  font-style: italic;
-}
-
-.marker-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #ffffff;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-align: left;
-}
-
-.marker-item:hover {
-  background: #eff6ff;
-  border-color: #2563eb;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15);
-}
-
-.marker-name {
-  font-weight: 600;
-  color: #1a202c;
-  flex: 1;
-}
-
-.marker-coords {
-  font-size: 0.8rem;
-  color: #6b7280;
-  margin-left: 8px;
-  white-space: nowrap;
-}
-
 /* Leaflet Popup */
 :deep(.leaflet-popup-content-wrapper) {
   border-radius: 8px;

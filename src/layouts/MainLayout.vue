@@ -51,20 +51,20 @@ import EssentialLink from 'components/EssentialLink.vue'
 
 const linksList = [
   {
-    title: 'Home',
-    caption: 'Chat AI',
+    title: 'กำหนดสถานที่ปลอดภัย',
+    caption: 'กำหนดสถานที่ไปยังจุดปลอดภัย',
     icon: 'home',
     link: '/#/'
   },
   {
-    title: 'Shortest Path',
-    caption: 'System V2',
+    title: 'เส้นทางสั้นที่สุดไปจุดปลอดภัย',
+    caption: 'การหาเส้นทางสั้นที่สุดไปจุดปลอดภัยภายในโรงเรียน',
     icon: 'map',
     link: '/#/shortest-path'
   },
   {
-    title: 'Tract Path',
-    caption: 'Tract Path',
+    title: 'นำทางบุคคลไปจุดปลอดภัย',
+    caption: 'การนำทางบุคคลไปจุดปลอดภัยภายในโรงเรียน',
     icon: 'directions',
     link: '/#/tract-path'
   }
