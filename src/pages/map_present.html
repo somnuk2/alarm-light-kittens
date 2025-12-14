@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>longan_map - Multiple Locations Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- TailwindCSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Leaflet CSS & JS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
+
+    body {
+      font-family: 'Kanit', sans-serif;
+    }
+
+    #map {
+      height: 520px;
+      border-radius: 0.75rem;
+      overflow: hidden;
+    }
+
+    .leaflet-popup-content-wrapper {
+      border-radius: 0.75rem;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen">
+  <div class="max-w-6xl mx-auto px-4 py-8 space-y-6">
+    <header class="space-y-2 text-center">
+      <h1 class="text-3xl md:text-4xl font-bold text-indigo-700">
+        แผนที่ระบุตำแหน่งอาคาร (Northern Thailand)
+      </h1>
+      <p class="text-slate-600 text-sm md:text-base">
+        โรงเรียนวารีเชียงใหม่ - การศึกษาเพื่ออนาคตก้าวไกล
+      </p>
+    </header>
+
+    <!-- กล่องหลัก: ซ้าย = ฟอร์ม, ขวา = แผนที่ -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- FORM -->
+      <section
+        class="lg:col-span-1 bg-white rounded-2xl shadow-md p-5 space-y-4"
+      >
+        <h2 class="text-lg font-semibold text-indigo-700 flex items-center gap-2">
+          <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">
+            1
+          </span>
+          ฟอร์มบันทึกตำแหน่งอาคาร (Marker Form)
+        </h2>
+
+        <div class="space-y-3">
+          <!-- ชื่อสถานที่ -->
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">
+              ชื่อสถานที่ / อาคาร (Building-Place)
+            </label>
+            <input
+              id="placeName"
+              type="text"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+              placeholder="เช่น อาคารที่ 1, futsal, สนามหญ้าจริง"
+            />
+          </div>
+
+          <!-- Latitude / Longitude -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">
+                Latitude
+              </label>
+              <input
+                id="lat"
+                type="number"
+                step="0.000001"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                placeholder="18.758769"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">
+                Longitude
+              </label>
+              <input
+                id="lng"
+                type="number"
+                step="0.000001"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                placeholder="99.014645"
+              />
+            </div>
+          </div>
+
+          <!-- Address สำหรับ geocoding -->
+          <div class="pt-1">
+            <label class="block text-sm font-medium text-slate-700 mb-1">
+              ที่อยู่ / สถานที่ (ใช้ Geocoding – Nominatim)
+            </label>
+            <input
+              id="address"
+              type="text"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+              placeholder="เช่น โรงเรียนวารี จังหวัดเชียงใหม่"
+            />
+            <p class="text-[11px] text-slate-400 mt-1">
+              ระบบจะเรียกใช้บริการ Nominatim (OpenStreetMap) และแคชพิกัดไว้ใน
+              Local Storage
+            </p>
+          </div>
+
+          <!-- ปุ่ม Action -->
+          <div class="flex flex-wrap gap-2 pt-1">
+            <button
+              id="geocodeBtn"
+              class="flex-1 min-w-[140px] inline-flex items-center justify-center rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+            >
+              ใช้ที่อยู่หา Latitude/Longitude
+            </button>
+            <button
+              id="addMarkerBtn"
+              class="flex-1 min-w-[140px] inline-flex items-center justify-center rounded-full bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700"
+            >
+              เพิ่ม / อัปเดต Marker
+            </button>
+          </div>
+
+          <button
+            id="resetFormBtn"
+            class="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+          >
+            ล้างฟอร์ม
+          </button>
+        </div>
+
+        <hr class="my-4" />
+
+        <div class="space-y-2">
+          <h3 class="text-sm font-semibold text-slate-700 flex items-center gap-1">
+            รายการ Marker ที่มีอยู่
+            <span class="text-[10px] text-slate-400">(คลิกชื่อเพื่อเลื่อนแผนที่)</span>
+          </h3>
+          <ul id="markerList" class="space-y-1 max-h-60 overflow-y-auto text-xs">
+            <!-- เติมด้วย JS -->
+          </ul>
+        </div>
+      </section>
+
+      <!-- MAP -->
+      <section class="lg:col-span-2 space-y-4">
+        <div class="bg-white rounded-2xl shadow-md p-5 space-y-3">
+          <h2 class="text-lg font-semibold text-indigo-700 flex items-center gap-2">
+            <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">
+              2
+            </span>
+            แผนที่ฐาน (Map base) – Leaflet + OpenStreetMap
+          </h2>
+          <p class="text-xs text-slate-500">
+            • Focus on Northern Thailand, zoom เริ่มต้นที่ 8<br />
+            • Marker สีเขียว (Green icon) หลายจุด (Multiple Locations) จากข้อมูลในฟอร์ม<br />
+            • คลิก Marker เพื่อดูข้อมูลอาคาร (Pop-up) ที่อัปเดตตามข้อมูลล่าสุด
+          </p>
+          <div id="map" class="mt-2"></div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="text-center text-[11px] text-slate-400 pt-4">
+      Program by HTML + JavaScript | TailwindCSS | Leaflet.js | OpenStreetMap | Nominatim
+    </footer>
+  </div>
+
+  <script>
+    // ==========================
+    // ตั้งค่าพื้นฐาน
+    // ==========================
+    const map = L.map("map").setView([18.8, 99.0], 8); // Northern Thailand, zoom 8
+
+    // OpenStreetMap tile layer
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+
+    // Green marker icon
+    const greenIcon = L.icon({
+      iconUrl:
+        "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowUrl:
+        "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+      shadowSize: [41, 41],
+    });
+
+    // เก็บ marker ทุกอันใน LayerGroup + index ตามชื่อ
+    const markersLayer = L.layerGroup().addTo(map);
+    const markerIndex = {}; // key = name, value = { marker, lat, lng }
+
+    // ==========================
+    // ข้อมูลเริ่มต้นจากตารางเดิม (10 จุด)
+    // ==========================
+    const initialLocations = [
+      {
+        name: "อาคารที่ 1",
+        lat: 18.758769,
+        lng: 99.014645, // requirement: this point must exist
+      },
+      { name: "อาคาร 2", lat: 18.758914, lng: 99.015257 },
+      { name: "อาคาร 3", lat: 18.758361, lng: 99.015129 },
+      { name: "อาคาร 4", lat: 18.757983, lng: 99.015512 },
+      { name: "อาคาร 5", lat: 18.758168, lng: 99.015763 },
+      { name: "อาคาร 6", lat: 18.757394, lng: 99.015381 },
+      { name: "อาคาร 7", lat: 18.75759, lng: 99.015905 },
+      { name: "futsal", lat: 18.757955, lng: 99.015097 },
+      {
+        name: "สนามหญ้าจริง (safe zone)",
+        lat: 18.757826,
+        lng: 99.014679,
+      },
+      { name: "สนามบาสเก็ดบอล", lat: 18.757833, lng: 99.015761 },
+    ];
+
+    // ==========================
+    // Utility: จัดการ Marker
+    // ==========================
+    function addOrUpdateMarker(name, lat, lng, flyTo = false) {
+      if (!name || isNaN(lat) || isNaN(lng)) return;
+
+      const key = name.trim();
+
+      // ถ้ามี marker นี้อยู่แล้ว -> อัปเดตตำแหน่ง + popup
+      if (markerIndex[key]) {
+        markerIndex[key].marker.setLatLng([lat, lng]);
+        markerIndex[key].marker.setPopupContent(
+          `<div>
+             <div class="font-semibold text-sm mb-1">${key}</div>
+             <div class="text-[11px] text-slate-500">
+               Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}
+             </div>
+           </div>`
+        );
+        markerIndex[key].lat = lat;
+        markerIndex[key].lng = lng;
+      } else {
+        // สร้าง marker ใหม่
+        const marker = L.marker([lat, lng], { icon: greenIcon }).addTo(
+          markersLayer
+        );
+        marker.bindPopup(
+          `<div>
+             <div class="font-semibold text-sm mb-1">${key}</div>
+             <div class="text-[11px] text-slate-500">
+               Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}
+             </div>
+           </div>`
+        );
+        markerIndex[key] = { marker, lat, lng };
+
+        // เมื่อคลิก marker ให้เปิด popup
+        marker.on("click", () => {
+          marker.openPopup();
+        });
+      }
+
+      updateMarkerList();
+      fitMapToAllMarkers();
+
+      if (flyTo) {
+        map.flyTo([lat, lng], 17, { duration: 0.8 });
+        markerIndex[key].marker.openPopup();
+      }
+    }
+
+    function updateMarkerList() {
+      const ul = document.getElementById("markerList");
+      ul.innerHTML = "";
+
+      const names = Object.keys(markerIndex).sort();
+      if (names.length === 0) {
+        ul.innerHTML =
+          '<li class="text-slate-400 text-xs">ยังไม่มี Marker กรุณาเพิ่มจากฟอร์ม</li>';
+        return;
+      }
+
+      names.forEach((name) => {
+        const item = markerIndex[name];
+        const li = document.createElement("li");
+        li.innerHTML = `
+          <button class="w-full text-left px-2 py-1 rounded-lg hover:bg-slate-100 flex items-center justify-between">
+            <span class="text-[11px] font-medium text-slate-700">${name}</span>
+            <span class="text-[10px] text-slate-400">
+              ${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}
+            </span>
+          </button>
+        `;
+        li.querySelector("button").addEventListener("click", () => {
+          map.flyTo([item.lat, item.lng], 17, { duration: 0.7 });
+          item.marker.openPopup();
+        });
+        ul.appendChild(li);
+      });
+    }
+
+    function fitMapToAllMarkers() {
+      const markers = Object.values(markerIndex);
+      if (markers.length === 0) return;
+
+      const group = L.featureGroup(markers.map((m) => m.marker));
+      if (markers.length === 1) {
+        map.setView(group.getBounds().getCenter(), 17);
+      } else {
+        map.fitBounds(group.getBounds().pad(0.2));
+      }
+    }
+
+    // เติมข้อมูลเริ่มต้น
+    initialLocations.forEach((loc) =>
+      addOrUpdateMarker(loc.name, loc.lat, loc.lng, false)
+    );
+
+    // ==========================
+    // Geocoding (Nominatim) + Cache
+    // ==========================
+    const GEOCODE_CACHE_KEY = "longan_geocode_cache";
+    let geocodeCache = {};
+
+    try {
+      const stored = localStorage.getItem(GEOCODE_CACHE_KEY);
+      if (stored) geocodeCache = JSON.parse(stored) || {};
+    } catch (e) {
+      geocodeCache = {};
+    }
+
+    async function geocodeAddress(address) {
+      if (!address) return null;
+
+      // ใช้ cache ก่อน
+      if (geocodeCache[address]) {
+        return geocodeCache[address];
+      }
+
+      const url =
+        "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=" +
+        encodeURIComponent(address);
+
+      const res = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error("Geocoding error");
+      }
+
+      const data = await res.json();
+      if (!data || data.length === 0) return null;
+
+      const lat = parseFloat(data[0].lat);
+      const lng = parseFloat(data[0].lon);
+
+      geocodeCache[address] = { lat, lng };
+      try {
+        localStorage.setItem(
+          GEOCODE_CACHE_KEY,
+          JSON.stringify(geocodeCache)
+        );
+      } catch (e) {
+        // ถ้า localStorage เต็มหรือใช้ไม่ได้ ให้ข้าม
+      }
+
+      return { lat, lng };
+    }
+
+    // ==========================
+    // Event: ปุ่ม + ฟอร์ม
+    // ==========================
+    const placeNameInput = document.getElementById("placeName");
+    const latInput = document.getElementById("lat");
+    const lngInput = document.getElementById("lng");
+    const addressInput = document.getElementById("address");
+
+    document
+      .getElementById("geocodeBtn")
+      .addEventListener("click", async () => {
+        const addr = addressInput.value.trim();
+        if (!addr) {
+          alert("กรุณากรอกที่อยู่สำหรับ Geocoding");
+          return;
+        }
+
+        try {
+          const btn = document.getElementById("geocodeBtn");
+          btn.disabled = true;
+          btn.textContent = "กำลังค้นหาพิกัด...";
+
+          const result = await geocodeAddress(addr);
+          if (!result) {
+            alert("ไม่พบพิกัดจากที่อยู่นี้ (Nominatim)");
+          } else {
+            latInput.value = result.lat.toFixed(6);
+            lngInput.value = result.lng.toFixed(6);
+            map.flyTo([result.lat, result.lng], 15, { duration: 0.8 });
+          }
+        } catch (err) {
+          console.error(err);
+          alert("เกิดข้อผิดพลาดในการเรียก Geocoding");
+        } finally {
+          const btn = document.getElementById("geocodeBtn");
+          btn.disabled = false;
+          btn.textContent = "ใช้ที่อยู่หา Latitude/Longitude";
+        }
+      });
+
+    document
+      .getElementById("addMarkerBtn")
+      .addEventListener("click", () => {
+        const name = placeNameInput.value.trim();
+        const lat = parseFloat(latInput.value);
+        const lng = parseFloat(lngInput.value);
+
+        if (!name || isNaN(lat) || isNaN(lng)) {
+          alert("กรุณากรอกชื่อสถานที่ และ Latitude/Longitude ให้ครบถ้วน");
+          return;
+        }
+
+        addOrUpdateMarker(name, lat, lng, true);
+      });
+
+    document.getElementById("resetFormBtn").addEventListener("click", () => {
+      placeNameInput.value = "";
+      latInput.value = "";
+      lngInput.value = "";
+      addressInput.value = "";
+    });
+
+    // ==========================
+    // ทดสอบ requirement ข้อท้าย:
+    // ต้องมี marker ที่ 18.758769, 99.014645 ชื่อ "อาคารที่ 1"
+    // (ได้สร้างไว้ใน initialLocations แล้ว และ popup แสดงชื่อถูกต้อง)
+    // ==========================
+  </script>
+</body>
+</html>

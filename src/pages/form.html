@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ระบบบันทึกเส้นทางสั้นที่สุดระหว่างอาคาร</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Kanit', sans-serif; }
+    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen py-8">
+  <div class="max-w-7xl mx-auto px-4">
+    <h1 class="text-3xl font-bold text-center text-indigo-700 mb-8">
+      ระบบบันทึกเส้นทางสั้นที่สุดระหว่างอาคาร
+    </h1>
+
+    <!-- Form -->
+    <div class="bg-white rounded-lg shadow-lg p-8 mb-8">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Building A -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">อาคาร A</label>
+          <select id="buildingASelect" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <option value="">-- เลือกอาคาร A --</option>
+            <option value="อาคาร 1 อาคารอำนวยการ|18.75877|99.01465">อาคาร 1 อาคารอำนวยการ</option>
+            <option value="อาคาร 2 อาคารสารสนเทศ|18.75891|99.01526">อาคาร 2 อาคารสารสนเทศ</option>
+            <option value="อาคาร 3 อาคารประถมศึกษา|18.75836|99.01513">อาคาร 3 อาคารประถมศึกษา</option>
+            <option value="อาคาร 4 อาคารมัธยมศึกษาตอนต้น|18.75798|99.01551">อาคาร 4 อาคารมัธยมศึกษาตอนต้น</option>
+            <option value="อาคาร 5 อาคารอนุบาล สระว่ายน้ำ โรงอาหาร|18.75817|99.01576">อาคาร 5 อาคารอนุบาล สระว่ายน้ำ โรงอาหาร</option>
+            <option value="อาคาร 6 อาคารพลศึกษา ห้องสภานักเรียน|18.75739|99.01538">อาคาร 6 อาคารพลศึกษา ห้องสภานักเรียน</option>
+            <option value="อาคาร 7 อาคารมัธยมศึกษาตอนปลาย ห้องสมุด|18.75759|99.01591">อาคาร 7 อาคารมัธยมศึกษาตอนปลาย ห้องสมุด</option>
+            <option value="อื่นๆ">อื่นๆ (กรอกเอง)</option>
+          </select>
+          <input type="text" id="nameA" placeholder="ชื่ออาคาร A (ถ้าเลือกอื่นๆ)" class="mt-2 w-full px-4 py-2 border border-gray-300 rounded-lg" readonly>
+          <div class="grid grid-cols-2 gap-3 mt-3">
+            <input type="text" id="latA" placeholder="Latitude อาคาร A" class="px-4 py-2 border border-gray-300 rounded-lg" readonly>
+            <input type="text" id="lngA" placeholder="Longitude อาคาร A" class="px-4 py-2 border border-gray-300 rounded-lg" readonly>
+          </div>
+        </div>
+
+        <!-- Building B -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">อาคาร B</label>
+          <select id="buildingBSelect" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <option value="">-- เลือกอาคาร B --</option>
+            <option value="อาคาร 1 อาคารอำนวยการ|18.75877|99.01465">อาคาร 1 อาคารอำนวยการ</option>
+            <option value="อาคาร 2 อาคารสารสนเทศ|18.75891|99.01526">อาคาร 2 อาคารสารสนเทศ</option>
+            <option value="อาคาร 3 อาคารประถมศึกษา|18.75836|99.01513">อาคาร 3 อาคารประถมศึกษา</option>
+            <option value="อาคาร 4 อาคารมัธยมศึกษาตอนต้น|18.75798|99.01551">อาคาร 4 อาคารมัธยมศึกษาตอนต้น</option>
+            <option value="อาคาร 5 อาคารอนุบาล สระว่ายน้ำ โรงอาหาร|18.75817|99.01576">อาคาร 5 อาคารอนุบาล สระว่ายน้ำ โรงอาหาร</option>
+            <option value="อาคาร 6 อาคารพลศึกษา ห้องสภานักเรียน|18.75739|99.01538">อาคาร 6 อาคารพลศึกษา ห้องสภานักเรียน</option>
+            <option value="อาคาร 7 อาคารมัธยมศึกษาตอนปลาย ห้องสมุด|18.75759|99.01591">อาคาร 7 อาคารมัธยมศึกษาตอนปลาย ห้องสมุด</option>
+            <option value="อื่นๆ">อื่นๆ (กรอกเอง)</option>
+          </select>
+          <input type="text" id="nameB" placeholder="ชื่ออาคาร B (ถ้าเลือกอื่นๆ)" class="mt-2 w-full px-4 py-2 border border-gray-300 rounded-lg" readonly>
+          <div class="grid grid-cols-2 gap-3 mt-3">
+            <input type="text" id="latB" placeholder="Latitude อาคาร B" class="px-4 py-2 border border-gray-300 rounded-lg" readonly>
+            <input type="text" id="lngB" placeholder="Longitude อาคาร B" class="px-4 py-2 border border-gray-300 rounded-lg" readonly>
+          </div>
+        </div>
+      </div>
+
+      <!-- Distance & Time -->
+      <div class="grid grid-cols-2 gap-6 mt-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">ระยะห่าง (เมตร)</label>
+          <input type="number" id="distance" placeholder="เช่น 20" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="0.01" min="0">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">เวลาเดินทาง (นาที)</label>
+          <input type="number" id="time" placeholder="เช่น 5" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" min="0">
+        </div>
+      </div>
+
+      <!-- Buttons -->
+      <div class="flex gap-4 mt-8 justify-center">
+        <button id="addBtn" class="px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">
+          เพิ่มข้อมูล
+        </button>
+        <button id="editBtn" class="px-8 py-3 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 transition" disabled>
+          แก้ไข
+        </button>
+        <button id="deleteBtn" class="px-8 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition" disabled>
+          ลบ
+        </button>
+        <button id="cancelBtn" class="hidden px-8 py-3 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600 transition">
+          ยกเลิก
+        </button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-indigo-600 text-white">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">อาคาร A</th>
+            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Lat A</th>
+            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Lng A</th>
+            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">อาคาร B</th>
+            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Lat B</th>
+            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Lng B</th>
+            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">ระยะห่าง (ม.)</th>
+            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">เวลา (นาที)</th>
+            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">จัดการ</th>
+          </tr>
+        </thead>
+        <tbody id="dataTable" class="bg-white divide-y divide-gray-200"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const buildings = {
+      "อาคาร 1 อาคารอำนวยการ": ["18.75877", "99.01465"],
+      "อาคาร 2 อาคารสารสนเทศ": ["18.75891", "99.01526"],
+      "อาคาร 3 อาคารประถมศึกษา": ["18.75836", "99.01513"],
+      "อาคาร 4 อาคารมัธยมศึกษาตอนต้น": ["18.75798", "99.01551"],
+      "อาคาร 5 อาคารอนุบาล สระว่ายน้ำ โรงอาหาร": ["18.75817", "99.01576"],
+      "อาคาร 6 อาคารพลศึกษา ห้องสภานักเรียน": ["18.75739", "99.01538"],
+      "อาคาร 7 อาคารมัธยมศึกษาตอนปลาย ห้องสมุด": ["18.75759", "99.01591"]
+    };
+
+    let data = JSON.parse(localStorage.getItem("shortestPaths")) || [];
+    let editingIndex = -1;
+
+    const addBtn = document.getElementById("addBtn");
+    const editBtn = document.getElementById("editBtn");
+    const deleteBtn = document.getElementById("deleteBtn");
+    const cancelBtn = document.getElementById("cancelBtn");
+
+    function renderTable() {
+      const tbody = document.getElementById("dataTable");
+      tbody.innerHTML = "";
+      data.forEach((item, index) => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-gray-50 cursor-pointer";
+        tr.onclick = () => selectRow(index, tr);
+        tr.innerHTML = `
+          <td class="px-6 py-4 whitespace-nowrap text-sm">${item.nameA}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm">${item.latA}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm">${item.lngA}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm">${item.nameB}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm">${item.latB}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm">${item.lngB}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${item.distance}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${item.time}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
+            <button onclick="event.stopPropagation(); selectRow(${index})" class="text-indigo-600 hover:text-indigo-900">เลือก</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function selectRow(index) {
+      const item = data[index];
+      document.getElementById("nameA").value = item.nameA;
+      document.getElementById("latA").value = item.latA;
+      document.getElementById("lngA").value = item.lngA;
+      document.getElementById("nameB").value = item.nameB;
+      document.getElementById("latB").value = item.latB;
+      document.getElementById("lngB").value = item.lngB;
+      document.getElementById("distance").value = item.distance;
+      document.getElementById("time").value = item.time;
+
+      // ตั้งค่า dropdown ให้ตรง
+      setDropdown("buildingASelect", item.nameA, item.latA, item.lngA);
+      setDropdown("buildingBSelect", item.nameB, item.latB, item.lngB);
+
+      editingIndex = index;
+      editBtn.disabled = false;
+      deleteBtn.disabled = false;
+      cancelBtn.classList.remove("hidden");
+      addBtn.textContent = "บันทึกการแก้ไข";
+      addBtn.className = "px-8 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition";
+    }
+
+    function setDropdown(selectId, name, lat, lng) {
+      const select = document.getElementById(selectId);
+      if (buildings[name]) {
+        select.value = `${name}|${lat}|${lng}`;
+        document.getElementById(selectId.replace("Select", "")).readOnly = true;
+      } else {
+        select.value = "อื่นๆ";
+        document.getElementById(selectId.replace("Select", "")).value = name;
+        document.getElementById(selectId.replace("Select", "")).readOnly = false;
+      }
+    }
+
+    function clearForm() {
+      document.getElementById("buildingASelect").value = "";
+      document.getElementById("buildingBSelect").value = "";
+      ["nameA","latA","lngA","nameB","latB","lngB","distance","time"].forEach(id => {
+        document.getElementById(id).value = "";
+        if (id.includes("name")) document.getElementById(id).readOnly = true;
+        if (id.includes("lat") || id.includes("lng")) document.getElementById(id).readOnly = true;
+      });
+      editingIndex = -1;
+      editBtn.disabled = true;
+      deleteBtn.disabled = true;
+      cancelBtn.classList.add("hidden");
+      addBtn.textContent = "เพิ่มข้อมูล";
+      addBtn.className = "px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition";
+    }
+
+    // Dropdown A
+    document.getElementById("buildingASelect").addEventListener("change", function() {
+      const val = this.value;
+      if (val && val !== "อื่นๆ") {
+        const [name, lat, lng] = val.split("|");
+        document.getElementById("nameA").value = name;
+        document.getElementById("latA").value = lat;
+        document.getElementById("lngA").value = lng;
+        document.getElementById("nameA").readOnly = true;
+      } else if (val === "อื่นๆ") {
+        document.getElementById("nameA").readOnly = false;
+        document.getElementById("latA").readOnly = false;
+        document.getElementById("lngA").readOnly = false;
+        document.getElementById("nameA").value = "";
+        document.getElementById("latA").value = "";
+        document.getElementById("lngA").value = "";
+      }
+    });
+
+    // Dropdown B
+    document.getElementById("buildingBSelect").addEventListener("change", function() {
+      const val = this.value;
+      if (val && val !== "อื่นๆ") {
+        const [name, lat, lng] = val.split("|");
+        document.getElementById("nameB").value = name;
+        document.getElementById("latB").value = lat;
+        document.getElementById("lngB").value = lng;
+        document.getElementById("nameB").readOnly = true;
+      } else if (val === "อื่นๆ") {
+        document.getElementById("nameB").readOnly = false;
+        document.getElementById("latB").readOnly = false;
+        document.getElementById("lngB").readOnly = false;
+        document.getElementById("nameB").value = "";
+        document.getElementById("latB").value = "";
+        document.getElementById("lngB").value = "";
+      }
+    });
+
+    // Add / Update
+    addBtn.addEventListener("click", () => {
+      const formData = {
+        nameA: document.getElementById("nameA").value.trim(),
+        latA: document.getElementById("latA").value.trim(),
+        lngA: document.getElementById("lngA").value.trim(),
+        nameB: document.getElementById("nameB").value.trim(),
+        latB: document.getElementById("latB").value.trim(),
+        lngB: document.getElementById("lngB").value.trim(),
+        distance: document.getElementById("distance").value,
+        time: document.getElementById("time").value
+      };
+
+      if (!formData.nameA || !formData.latA || !formData.lngA || !formData.nameB || !formData.latB || !formData.lngB || !formData.distance || !formData.time) {
+        alert("กรุณากรอกข้อมูลให้ครบถ้วน");
+        return;
+      }
+
+      if (editingIndex === -1) {
+        data.push(formData);
+      } else {
+        data[editingIndex] = formData;
+      }
+
+      localStorage.setItem("shortestPaths", JSON.stringify(data));
+      renderTable();
+      clearForm();
+    });
+
+    // Edit (already handled in selectRow)
+
+    // Delete
+    deleteBtn.addEventListener("click", () => {
+      if (editingIndex !== -1 && confirm("ยืนยันการลบข้อมูลนี้?")) {
+        data.splice(editingIndex, 1);
+        localStorage.setItem("shortestPaths", JSON.stringify(data));
+        renderTable();
+        clearForm();
+      }
+    });
+
+    // Cancel
+    cancelBtn.addEventListener("click", clearForm);
+
+    // Load data on start
+    renderTable();
+  </script>
+</body>
+</html>
