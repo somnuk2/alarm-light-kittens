@@ -2,7 +2,7 @@ name: Deploy Quasar SPA to GitHub Pages
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 permissions:
   contents: write
@@ -10,7 +10,6 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -21,8 +20,6 @@ jobs:
 
       - run: npm ci
       - run: npx quasar build
-
-      # (ช่วยเช็คว่ามีโฟลเดอร์จริง ก่อน deploy)
       - run: ls -la dist/spa
 
       - name: Deploy to GitHub Pages
