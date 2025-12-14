@@ -1,15 +1,17 @@
-name: alarm-light-kittens
+name: Deploy Quasar SPA to GitHub Pages
 
 on:
   push:
-    branches: [ "main" ] # เปลี่ยนเป็น branch ที่คุณใช้
+    branches: ["main"]
+
+# ให้สิทธิ์ GITHUB_TOKEN เขียน repo ได้ (push ไป gh-pages)
+permissions:
+  contents: write
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write  # Allow pushing to gh-pages
-      
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -17,17 +19,31 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # ใช้ Node.js เวอร์ชัน 18 หรือสูงกว่า
+          node-version: 20
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build Quasar SPA
         run: npx quasar build
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GH_PAT }}  # 🔒 Reference the secret
-          publish_dir: dist/spa
+      - name: Verify build output
+        run: ls -la dist/spa
 
+      # Debug แบบปลอดภัย: ไม่โชว์ค่า token แค่บอกว่ามี/ไม่มี
+      - name: Debug token presence (safe)
+        run: |
+          echo "event=${{ github.event_name }}"
+          echo "ref=${{ github.ref }}"
+          if [ -z "${{ github.token }}" ]; then
+            echo "github.token is EMPTY"
+          else
+            echo "github.token is PRESENT"
+          fi
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ github.token }}
+          publish_dir: ./dist/spa
