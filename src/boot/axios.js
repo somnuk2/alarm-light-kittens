@@ -8,8 +8,16 @@ import axios from 'axios'
 // "export default () => {}" function below (which runs individually
 // for each client)
 // Use environment variable for API base URL (production vs development)
-// HARDCODED URL
-const baseURL = 'https://alarm-light-kittens-2.onrender.com'
+// Use environment variable for API base URL (production vs development)
+// Note: In Quasar webpack mode, process.env is often used, but import.meta.env is for Vite.
+// Since you had a syntax error with import.meta before (likely due to Webpack config),
+// let's use process.env which Quasar Webpack supports by default for env vars defined in quasar.config.js or dotenv.
+// However, the previous error "Cannot use 'import.meta' outside a module" suggests the file wasn't treated as a module during some step.
+// But standard Quasar/Vue 3 project usually supports import.meta.env if using Vite or properly configured Webpack.
+// Given the error, let's try a safer approach compatible with both or rely on the standard Quasar way.
+
+// Let's stick to the standard way that was there but ensure it works.
+const baseURL = process.env.VITE_API_BASE_URL || 'http://localhost:3000';
 const api = axios.create({ baseURL })
 
 export default defineBoot(({ app }) => {

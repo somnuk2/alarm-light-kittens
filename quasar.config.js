@@ -36,8 +36,9 @@ export default defineConfig((ctx) => {
 
     // Full list of options: https://v2.quasar.dev/quasar-cli-webpack/quasar-config-file#build
     build: {
-      // publicPath: '/alarm-light-kittens',
-      vueRouterMode: 'hash', // available values: 'hash', 'history'
+      env: {
+        VITE_API_BASE_URL: process.env.VITE_API_BASE_URL || 'https://alarm-light-kittens-2.onrender.com'
+      },
 
       // webpackTranspile: false,
 
