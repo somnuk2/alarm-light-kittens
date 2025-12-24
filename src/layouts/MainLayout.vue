@@ -54,19 +54,19 @@ const linksList = [
     title: 'กำหนดสถานที่ปลอดภัย',
     caption: 'กำหนดสถานที่ไปยังจุดปลอดภัย',
     icon: 'home',
-    link: '/#/'
+    link: '/'
   },
   {
     title: 'เส้นทางสั้นที่สุดไปจุดปลอดภัย',
     caption: 'การหาเส้นทางสั้นที่สุดไปจุดปลอดภัยภายในโรงเรียน',
     icon: 'map',
-    link: '/#/shortest-path'
+    link: '/shortest-path'
   },
   {
     title: 'นำทางบุคคลไปจุดปลอดภัย',
     caption: 'การนำทางบุคคลไปจุดปลอดภัยภายในโรงเรียน',
     icon: 'directions',
-    link: '/#/tract-path'
+    link: '/tract-path'
   }
 ]
 
