@@ -9,8 +9,25 @@ const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
+
+// CORS Configuration
+app.use(cors({
+  origin: '*', // Allow all origins for troubleshooting
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
+
+// Main route for health check
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: 'Backend is running' });
+});
 
 // Get all markers
 app.get('/api/markers', async (req, res) => {
