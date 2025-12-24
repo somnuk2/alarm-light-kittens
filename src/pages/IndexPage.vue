@@ -139,7 +139,10 @@
                         </q-item-label>
                       </q-item-section>
                       <q-item-section side>
-                        <q-icon name="chevron_right" color="grey-4" />
+                        <div class="row q-gutter-xs">
+                          <q-btn flat round color="negative" icon="delete" size="sm" @click.stop="confirmDelete(item.name)" />
+                          <q-icon name="chevron_right" color="grey-4" />
+                        </div>
                       </q-item-section>
                     </q-item>
                   </q-list>
@@ -180,6 +183,8 @@ import { ref, onMounted, computed, reactive, markRaw } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useQuasar } from 'quasar';
+import { api } from 'boot/axios';
+import { SHARED_LOCATIONS } from '../constants/locations';
 
 const $q = useQuasar();
 
@@ -214,24 +219,13 @@ const greenIcon = L.icon({
   shadowSize: [41, 41],
 });
 
-const initialLocations = [
-  { name: "อาคารที่ 1", lat: 18.758769, lng: 99.014645 },
-  { name: "อาคารที่ 2", lat: 18.758914, lng: 99.015257 },
-  { name: "อาคารที่ 3", lat: 18.758361, lng: 99.015129 },
-  { name: "อาคารที่ 4", lat: 18.757983, lng: 99.015512 },
-  { name: "อาคารที่ 5", lat: 18.758168, lng: 99.015763 },
-  { name: "อาคารที่ 6", lat: 18.757394, lng: 99.015381 },
-  { name: "อาคารที่ 7", lat: 18.75759, lng: 99.015905 },
-  { name: "สนามฟุตซอล", lat: 18.757955, lng: 99.015097 },
-  { name: "สนามหญ้าจริง (safe zone)", lat: 18.757826, lng: 99.014679 },
-  { name: "สนามบาสเก็ดบอล", lat: 18.757833, lng: 99.015761 },
-];
+const initialLocations = SHARED_LOCATIONS;
 
 const GEOCODE_CACHE_KEY = "longan_geocode_cache";
 
 // --- Methods ---
 
-function initMap() {
+async function initMap() {
   map.value = L.map("map").setView([18.8, 99.0], 8);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -241,9 +235,39 @@ function initMap() {
 
   markersLayer.value = L.layerGroup().addTo(map.value);
 
-  // Load initial Data
-  initialLocations.forEach(loc => {
-    addOrUpdateMarker(loc.name, loc.lat, loc.lng, false);
+  // Load markers from Backend
+  try {
+    const response = await api.get('/api/markers');
+    const markers = response.data;
+    if (markers && markers.length > 0) {
+      markers.forEach(loc => {
+        addOrUpdateMarker(loc.name, loc.lat, loc.lng, false);
+      });
+    } else {
+      // Fallback to initial if DB is empty
+      initialLocations.forEach(loc => {
+        addOrUpdateMarker(loc.name, loc.lat, loc.lng, false);
+      });
+    }
+  } catch (error) {
+    console.error('Failed to fetch markers:', error);
+    // Fallback if API fails
+    initialLocations.forEach(loc => {
+      addOrUpdateMarker(loc.name, loc.lat, loc.lng, false);
+    });
+  }
+
+  // Click on map to get Lat/Lng
+  map.value.on('click', (e) => {
+    lat.value = Number(e.latlng.lat.toFixed(6));
+    lng.value = Number(e.latlng.lng.toFixed(6));
+    $q.notify({
+      color: 'info',
+      message: `เลือกพิกัด: ${lat.value}, ${lng.value}`,
+      icon: 'add_location',
+      timeout: 1500,
+      position: 'bottom-right'
+    });
   });
 }
 
@@ -290,11 +314,20 @@ function addOrUpdateMarker(name, latitude, longitude, flyTo = false) {
 }
 
 function createPopupContent(name, lat, lng) {
-  return `<div>
+  return `<div class="custom-popup">
              <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">${name}</div>
-             <div style="font-size: 12px; color: #666;">
+             <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
                Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}
              </div>
+             <button class="q-btn q-btn-item non-selectable no-outline q-btn--flat q-btn--rectangle text-negative q-focusable q-hoverable q-btn--dense"
+                     style="font-size: 11px; padding: 4px 8px; min-height: unset;"
+                     onclick="window.handleDeleteMarker('${name.replace(/'/g, "\\'")} ')">
+               <span class="q-focus-helper"></span>
+               <span class="q-btn__content text-center col items-center q-anchor--skip justify-center row">
+                 <i class="q-icon material-icons" aria-hidden="true" role="img">delete</i>
+                 <span class="block q-ml-xs">ลบตำแหน่ง</span>
+               </span>
+             </button>
            </div>`;
 }
 
@@ -310,7 +343,7 @@ function fitMapToAllMarkers() {
   }
 }
 
-function handleAddMarker() {
+async function handleAddMarker() {
   if (!placeName.value || lat.value === '' || lng.value === '') {
     $q.notify({
       color: 'negative',
@@ -319,13 +352,83 @@ function handleAddMarker() {
     });
     return;
   }
-  addOrUpdateMarker(placeName.value, Number(lat.value), Number(lng.value), true);
-  $q.notify({
+
+  const markerData = {
+    name: placeName.value,
+    lat: Number(lat.value),
+    lng: Number(lng.value)
+  };
+
+  try {
+    // Save to Backend
+    await api.post('/api/markers', markerData);
+
+    addOrUpdateMarker(markerData.name, markerData.lat, markerData.lng, true);
+
+    $q.notify({
       color: 'positive',
       message: `บันทึก "${placeName.value}" เรียบร้อยแล้ว`,
       icon: 'check_circle'
     });
+  } catch (error) {
+    console.error('Error saving marker:', error);
+    $q.notify({
+      color: 'negative',
+      message: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล',
+      icon: 'error'
+    });
+  }
 }
+
+function confirmDelete(name) {
+  $q.dialog({
+    title: 'ยืนยันการลบ',
+    message: `คุณต้องการลบตำแหน่ง "${name}" ใช่หรือไม่?`,
+    cancel: true,
+    persistent: true,
+    ok: {
+      flat: true,
+      color: 'negative',
+      label: 'ลบออก'
+    }
+  }).onOk(async () => {
+    await handleDeleteMarker(name);
+  }).onCancel(() => {
+    console.log('Delete cancelled');
+  });
+}
+
+async function handleDeleteMarker(name) {
+  try {
+    await api.delete(`/api/markers/${encodeURIComponent(name)}`);
+
+    // Remove from map and layer
+    if (markerMap[name]) {
+      markersLayer.value.removeLayer(markerMap[name].marker);
+      delete markerMap[name];
+    }
+
+    fitMapToAllMarkers();
+
+    $q.notify({
+      color: 'positive',
+      message: `ลบ "${name}" เรียบร้อยแล้ว`,
+      icon: 'delete'
+    });
+  } catch (error) {
+    console.error('Error deleting marker:', error);
+    $q.notify({
+      color: 'negative',
+      message: 'เกิดข้อผิดพลาดในการลบข้อมูล',
+      icon: 'error'
+    });
+  }
+}
+
+// Expose to window for popup button
+onMounted(() => {
+  window.handleDeleteMarker = handleDeleteMarker;
+});
 
 function resetForm() {
   placeName.value = '';

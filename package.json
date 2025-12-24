@@ -9,6 +9,7 @@
   "scripts": {
     "test": "echo \"No test specified\" && exit 0",
     "dev": "quasar dev",
+    "dev:all": "concurrently \"quasar dev\" \"npm run dev --prefix server\"",
     "build": "quasar build",
     "postinstall": "quasar prepare"
   },
@@ -23,7 +24,8 @@
   },
   "devDependencies": {
     "@quasar/app-webpack": "^4.1.0",
-    "autoprefixer": "^10.4.2"
+    "autoprefixer": "^10.4.2",
+    "concurrently": "^9.1.0"
   },
   "browserslist": [
     "last 10 Chrome versions",

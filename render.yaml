@@ -1,0 +1,17 @@
+services:
+  # Backend Web Service
+  - type: web
+    name: alarm-light-kittens-backend
+    runtime: node
+    region: singapore
+    plan: free
+    branch: main
+    rootDir: server
+    buildCommand: npm install && npx prisma generate
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /api/markers

@@ -145,7 +145,7 @@
                        label="ยกเลิก/ล้าง"
                        @click="clearForm"
                      />
-                   </div>
+                    </div>
 
                 </div>
               </q-card-section>
@@ -314,35 +314,19 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useQuasar } from 'quasar';
+import { api } from 'boot/axios';
+import { SHARED_LOCATIONS, SHARED_EDGES } from '../constants/locations';
 
 const $q = useQuasar();
 
 // Constants & Defaults
-const buildings = {
-  "อาคาร 1 อาคารอำนวยการ": ["18.75877", "99.01465"],
-  "อาคาร 2 อาคารสารสนเทศ": ["18.75891", "99.01526"],
-  "อาคาร 3 อาคารประถมศึกษา": ["18.75836", "99.01513"],
-  "อาคาร 4 อาคารมัธยมศึกษาตอนต้น": ["18.75798", "99.01551"],
-  "อาคาร 5 อาคารอนุบาล สระว่ายน้ำ โรงอาหาร": ["18.75817", "99.01576"],
-  "อาคาร 6 อาคารพลศึกษา ห้องสภานักเรียน": ["18.75739", "99.01538"],
-  "อาคาร 7 อาคารมัธยมศึกษาตอนปลาย ห้องสมุด": ["18.75759", "99.01591"]
-};
+const buildings = {};
+SHARED_LOCATIONS.forEach(loc => {
+  buildings[loc.name] = [loc.lat.toString(), loc.lng.toString()];
+});
 
 const buildingOptions = Object.keys(buildings).map(k => ({ label: k, value: k }));
 buildingOptions.push({ label: 'อื่นๆ (กรอกเอง)', value: 'other' });
-
-const defaultData = [
-  { nameA: "อาคาร 1", latA: "18.75877", lngA: "99.01465", nameB: "อาคาร 3", latB: "18.75836", lngB: "99.01513", distance: "20", time: "20" },
-  { nameA: "อาคาร 3", latA: "18.75836", lngA: "99.01513", nameB: "futsal", latB: "18.757955", lngB: "99.015097", distance: "15", time: "15" },
-  { nameA: "futsal", latA: "18.757955", lngA: "99.015097", nameB: "สนามหญ้าจริง (safe zone)", latB: "18.757826", lngB: "99.014679", distance: "11", time: "11" },
-  { nameA: "อาคาร 2", latA: "18.75891", lngA: "99.01526", nameB: "futsal", latB: "18.757955", lngB: "99.015097", distance: "20", time: "20" },
-  { nameA: "อาคาร 1", latA: "18.75877", lngA: "99.01465", nameB: "อาคาร 2", latB: "18.75891", lngB: "99.01526", distance: "5", time: "5" },
-  { nameA: "อาคาร 2", latA: "18.75891", lngA: "99.01526", nameB: "อาคาร 3", latB: "18.75836", lngB: "99.01513", distance: "20", time: "20" },
-  { nameA: "อาคาร 4", latA: "18.75798", lngA: "99.01551", nameB: "futsal", latB: "18.757955", lngB: "99.015097", distance: "10", time: "10" },
-  { nameA: "อาคาร 5", latA: "18.75817", lngA: "99.01576", nameB: "อาคาร 4", latB: "18.75798", lngB: "99.01551", distance: "12", time: "12" },
-  { nameA: "อาคาร 6", latA: "18.75739", lngA: "99.01538", nameB: "สนามหญ้าจริง (safe zone)", latB: "18.757826", lngB: "99.014679", distance: "20", time: "20" },
-  { nameA: "อาคาร 7", latA: "18.75759", lngA: "99.01591", nameB: "สนามบาสเก็ดบอล", latB: "18.757833", lngB: "99.015761", distance: "15", time: "15" },
-];
 
 const columns = [
   { name: 'nameA', label: 'อาคาร A', field: 'nameA', align: 'left', sortable: true },
@@ -414,28 +398,35 @@ function clearForm() {
   editingIndex.value = -1;
 }
 
-function saveData() {
+async function saveData() {
   if (!form.nameA || !form.nameB || !form.distance || !form.time) {
     $q.notify({ type: 'warning', message: 'กรุณากรอกข้อมูลให้ครบ' });
     return;
   }
   const newData = {
-    nameA: form.nameA, latA: form.latA, lngA: form.lngA,
-    nameB: form.nameB, latB: form.latB, lngB: form.lngB,
-    distance: form.distance, time: form.time
+    nameA: form.nameA, latA: Number(form.latA), lngA: Number(form.lngA),
+    nameB: form.nameB, latB: Number(form.latB), lngB: Number(form.lngB),
+    distance: Number(form.distance), time: Number(form.time)
   };
 
-  if (isEditing.value) {
-    edgeList.value[editingIndex.value] = newData;
-    $q.notify({ type: 'positive', message: 'แก้ไขข้อมูลเรียบร้อย' });
-  } else {
-    edgeList.value.push(newData);
-    $q.notify({ type: 'positive', message: 'เพิ่มข้อมูลเรียบร้อย' });
-  }
+  try {
+    if (isEditing.value) {
+      const id = edgeList.value[editingIndex.value].id;
+      const resp = await api.post('/api/edges', { ...newData, id });
+      edgeList.value[editingIndex.value] = resp.data;
+      $q.notify({ type: 'positive', message: 'แก้ไขข้อมูลเรียบร้อย' });
+    } else {
+      const resp = await api.post('/api/edges', newData);
+      edgeList.value.push(resp.data);
+      $q.notify({ type: 'positive', message: 'เพิ่มข้อมูลเรียบร้อย' });
+    }
 
-  saveToStorage();
-  clearForm();
-  updateGraph();
+    clearForm();
+    updateGraph();
+  } catch (error) {
+    console.error('Error saving edge:', error);
+    $q.notify({ type: 'negative', message: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล' });
+  }
 }
 
 function editRow(row, idx) {
@@ -451,28 +442,58 @@ function editRow(row, idx) {
   form.selectedB = buildings[row.nameB] ? row.nameB : 'other';
 }
 
-function deleteData() {
+async function deleteData() {
   if (editingIndex.value === -1) return;
-  if (confirm('ต้องการลบข้อมูลนี้หรือไม่?')) {
-    edgeList.value.splice(editingIndex.value, 1);
-    saveToStorage();
-    clearForm();
-    updateGraph();
-    $q.notify({ type: 'negative', message: 'ลบข้อมูลแล้ว' });
-  }
+  const item = edgeList.value[editingIndex.value];
+
+  $q.dialog({
+    title: 'ยืนยันการลบ',
+    message: `ต้องการลบเส้นทาง ${item.nameA} - ${item.nameB} หรือไม่?`,
+    cancel: true,
+    persistent: true,
+    ok: { flat: true, color: 'negative', label: 'ลบออก' }
+  }).onOk(async () => {
+    try {
+      await api.delete(`/api/edges/${item.id}`);
+      edgeList.value.splice(editingIndex.value, 1);
+      clearForm();
+      updateGraph();
+      $q.notify({ type: 'negative', message: 'ลบข้อมูลแล้ว' });
+    } catch (error) {
+      console.error('Error deleting edge:', error);
+      $q.notify({ type: 'negative', message: 'เกิดข้อผิดพลาดในการลบข้อมูล' });
+    }
+  });
 }
 
-function saveToStorage() {
-  localStorage.setItem('shortestPaths_v2', JSON.stringify(edgeList.value));
-}
+async function loadFromBackend() {
+  const defaultData = SHARED_EDGES.map(edge => {
+    const locA = SHARED_LOCATIONS.find(l => l.name === edge.nameA);
+    const locB = SHARED_LOCATIONS.find(l => l.name === edge.nameB);
+    return {
+      nameA: edge.nameA,
+      latA: locA ? locA.lat.toString() : '0',
+      lngA: locA ? locA.lng.toString() : '0',
+      nameB: edge.nameB,
+      latB: locB ? locB.lat.toString() : '0',
+      lngB: locB ? locB.lng.toString() : '0',
+      distance: edge.distance.toString(),
+      time: edge.time.toString()
+    };
+  });
 
-function loadFromStorage() {
-  const str = localStorage.getItem('shortestPaths_v2');
-  if (str) {
-    edgeList.value = JSON.parse(str);
-  } else {
+  try {
+    const resp = await api.get('/api/edges');
+    if (resp.data && resp.data.length > 0) {
+      edgeList.value = resp.data;
+    } else {
+      // Fallback to default if DB is empty
+      edgeList.value = [...defaultData];
+    }
+  } catch (error) {
+    console.error('Error loading edges:', error);
+    $q.notify({ type: 'negative', message: 'ไม่สามารถดึงข้อมูลจาก Server ได้' });
     edgeList.value = [...defaultData];
-    saveToStorage();
   }
   updateGraph();
 }
@@ -619,7 +640,7 @@ function isEdgeDataHighlighted(edge) {
 }
 
 onMounted(() => {
-  loadFromStorage();
+  loadFromBackend();
 });
 </script>
 

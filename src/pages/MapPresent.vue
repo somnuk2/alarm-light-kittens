@@ -174,6 +174,8 @@
 <script>
 import L from 'leaflet';
 import { useQuasar } from 'quasar';
+import { api } from 'boot/axios';
+import { SHARED_LOCATIONS } from '../constants/locations';
 
 export default {
   name: 'MapPresent',
@@ -195,18 +197,7 @@ export default {
       markerIndex: {},
       geocodeCache: {},
       greenIcon: null,
-      initialLocations: [
-        { name: 'อาคารที่ 1', lat: 18.758769, lng: 99.014645 },
-        { name: 'อาคาร 2', lat: 18.758914, lng: 99.015257 },
-        { name: 'อาคาร 3', lat: 18.758361, lng: 99.015129 },
-        { name: 'อาคาร 4', lat: 18.757983, lng: 99.015512 },
-        { name: 'อาคาร 5', lat: 18.758168, lng: 99.015763 },
-        { name: 'อาคาร 6', lat: 18.757394, lng: 99.015381 },
-        { name: 'อาคาร 7', lat: 18.75759, lng: 99.015905 },
-        { name: 'futsal', lat: 18.757955, lng: 99.015097 },
-        { name: 'สนามหญ้าจริง (safe zone)', lat: 18.757826, lng: 99.014679 },
-        { name: 'สนามบาสเก็ดบอล', lat: 18.757833, lng: 99.015761 },
-      ],
+      initialLocations: SHARED_LOCATIONS,
     };
   },
   computed: {
@@ -217,11 +208,29 @@ export default {
   mounted() {
     this.loadGeocodeCache();
     this.loadLeafletCSS();
-    this.$nextTick(() => {
+    this.$nextTick(async () => {
       this.initMap();
-      this.initialLocations.forEach((loc) =>
-        this.addOrUpdateMarker(loc.name, loc.lat, loc.lng, false)
-      );
+
+      // Load markers from Backend
+      try {
+        const response = await api.get('/api/markers');
+        const markers = response.data;
+        if (markers && markers.length > 0) {
+          markers.forEach(loc => {
+            this.addOrUpdateMarker(loc.name, loc.lat, loc.lng, false);
+          });
+        } else {
+          // Fallback to initial
+          this.initialLocations.forEach(loc => {
+            this.addOrUpdateMarker(loc.name, loc.lat, loc.lng, false);
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch markers:', error);
+        this.initialLocations.forEach(loc => {
+          this.addOrUpdateMarker(loc.name, loc.lat, loc.lng, false);
+        });
+      }
     });
   },
   beforeUnmount() {
@@ -261,16 +270,40 @@ export default {
       });
 
       this.markersLayer = L.layerGroup().addTo(this.map);
+
+      // Click on map to get Lat/Lng
+      this.map.on('click', (e) => {
+        this.lat = Number(e.latlng.lat.toFixed(6));
+        this.lng = Number(e.latlng.lng.toFixed(6));
+        this.q.notify({
+          color: 'info',
+          message: `เลือกพิกัด: ${this.lat}, ${this.lng}`,
+          icon: 'add_location',
+          timeout: 1500,
+          position: 'bottom-right'
+        });
+      });
     },
     addOrUpdateMarker(name, lat, lng, flyTo = false) {
       if (!name || isNaN(lat) || isNaN(lng)) return;
 
       const key = name.trim();
-      const popupContent = `<div class="popup-content">
-        <strong>${key}</strong><br>
+      const popupContent = L.DomUtil.create('div', 'popup-content');
+      popupContent.innerHTML = `<strong>${key}</strong><br>
         Lat: ${lat.toFixed(6)}<br>
-        Lng: ${lng.toFixed(6)}
-      </div>`;
+        Lng: ${lng.toFixed(6)}<br>
+        <button class="q-btn q-btn-item non-selectable no-outline q-btn--flat q-btn--rectangle text-negative q-focusable q-hoverable q-btn--dense mt-1"
+                style="font-size: 11px; padding: 2px 4px;"
+                id="popup-delete-${key}">
+          <span class="q-btn__content">ลบตำแหน่ง</span>
+        </button>`;
+
+      const deleteBtn = popupContent.querySelector(`#popup-delete-${key}`);
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', () => {
+          this.confirmDelete(key);
+        });
+      }
 
       if (this.markerIndex[key]) {
         this.markerIndex[key].marker.setLatLng([lat, lng]);
@@ -379,7 +412,7 @@ export default {
         this.isGeocoding = false;
       }
     },
-    handleAddMarker() {
+    async handleAddMarker() {
       const name = this.placeName.trim();
 
       if (!name || isNaN(this.lat) || isNaN(this.lng)) {
@@ -387,10 +420,41 @@ export default {
         return;
       }
 
-      this.addOrUpdateMarker(name, this.lat, this.lng, true);
-      this.resultMessage = `✅ เพิ่ม Marker "${name}" สำเร็จ`;
-      this.q.notify({ type: 'positive', message: `เพิ่ม Marker "${name}" สำเร็จ` });
-      this.handleResetForm();
+      try {
+        await api.post('/api/markers', { name, lat: this.lat, lng: this.lng });
+        this.addOrUpdateMarker(name, this.lat, this.lng, true);
+        this.resultMessage = `✅ บันทึก Marker "${name}" สำเร็จ`;
+        this.q.notify({ type: 'positive', message: `บันทึก Marker "${name}" สำเร็จ` });
+        this.handleResetForm();
+      } catch (error) {
+        console.error('Error saving marker:', error);
+        this.q.notify({ type: 'negative', message: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล' });
+      }
+    },
+    confirmDelete(name) {
+      this.q.dialog({
+        title: 'ยืนยันการลบ',
+        message: `คุณต้องการลบตำแหน่ง "${name}" ใช่หรือไม่?`,
+        cancel: true,
+        persistent: true,
+        ok: { flat: true, color: 'negative', label: 'ลบออก' }
+      }).onOk(() => {
+        this.handleDeleteMarker(name);
+      });
+    },
+    async handleDeleteMarker(name) {
+      try {
+        await api.delete(`/api/markers/${encodeURIComponent(name)}`);
+        if (this.markerIndex[name]) {
+          this.markersLayer.removeLayer(this.markerIndex[name].marker);
+          delete this.markerIndex[name];
+        }
+        this.fitMapToAllMarkers();
+        this.q.notify({ type: 'positive', message: `ลบ "${name}" เรียบร้อยแล้ว` });
+      } catch (error) {
+        console.error('Error deleting marker:', error);
+        this.q.notify({ type: 'negative', message: 'เกิดข้อผิดพลาดในการลบข้อมูล' });
+      }
     },
     handleResetForm() {
       this.placeName = '';
