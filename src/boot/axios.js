@@ -8,7 +8,8 @@ import axios from 'axios'
 // "export default () => {}" function below (which runs individually
 // for each client)
 // Use environment variable for API base URL (production vs development)
-const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+// HARDCODED URL
+const baseURL = 'https://alarm-light-kittens-2.onrender.com'
 const api = axios.create({ baseURL })
 
 export default defineBoot(({ app }) => {
