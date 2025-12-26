@@ -5,157 +5,110 @@
         <h1 class="text-h4 text-center text-weight-bold q-mb-xs text-primary">แผนที่ระบุตำแหน่งอาคาร</h1>
         <p class="text-subtitle1 text-center text-grey-7 q-mb-lg">โรงเรียนวารีเชียงใหม่ (Northern Thailand)</p>
 
-        <!-- Controls Section -->
-        <q-card class="my-card q-mb-md">
-          <q-card-section class="bg-blue-grey-1">
-            <div class="row q-col-gutter-md items-end">
-              <!-- Place Name -->
-              <div class="col-12 col-md-3">
-                <q-input
-                  v-model="placeName"
-                  label="ชื่อสถานที่ / อาคาร"
-                  placeholder="เช่น อาคารที่ 1"
-                  outlined
-                  dense
-                  bg-color="white"
-                />
-              </div>
-
-              <!-- Lat -->
-              <div class="col-6 col-md-2">
-                <q-input
-                  v-model.number="lat"
-                  type="number"
-                  label="Latitude"
-                  placeholder="18.xxxx"
-                  outlined
-                  dense
-                  bg-color="white"
-                  step="0.000001"
-                />
-              </div>
-
-              <!-- Lng -->
-              <div class="col-6 col-md-2">
-                <q-input
-                  v-model.number="lng"
-                  type="number"
-                  label="Longitude"
-                  placeholder="99.xxxx"
-                  outlined
-                  dense
-                  bg-color="white"
-                  step="0.000001"
-                />
-              </div>
-
-               <!-- Address -->
-              <div class="col-12 col-md-3">
-                <q-input
-                  v-model="address"
-                  label="ค้นหาพิกัด (Geocoding)"
-                  placeholder="เช่น โรงเรียนวารี"
-                  outlined
-                  dense
-                  bg-color="white"
-                  @keyup.enter="handleGeocode"
-                />
-              </div>
-
-              <!-- Button Group -->
-              <div class="col-12 col-md-auto row q-gutter-sm">
-                <q-btn
-                  unelevated
-                  color="secondary"
-                  icon="search"
-                  @click="handleGeocode"
-                  :loading="isGeocoding"
-                  round
-                  dense
-                >
-                  <q-tooltip>ค้นหาพิกัด</q-tooltip>
-                </q-btn>
-
-                <q-btn
-                  unelevated
-                  color="positive"
-                  icon="add"
-                  label="เพิ่ม"
-                  @click="handleAddMarker"
-                />
-
-                 <q-btn
-                  outline
-                  color="grey"
-                  icon="refresh"
-                  @click="handleResetForm"
-                  round
-                  dense
-                >
-                  <q-tooltip>ล้างค่า</q-tooltip>
-                </q-btn>
-              </div>
-            </div>
-          </q-card-section>
-
-          <!-- Result Message -->
-          <q-separator />
-          <q-banner v-if="resultMessage" dense class="bg-blue-1 text-primary">
-            <template v-slot:avatar>
-              <q-icon name="info" color="primary" />
-            </template>
-            {{ resultMessage }}
-          </q-banner>
-        </q-card>
+        <div class="row q-col-gutter-md q-mb-lg">
+          <!-- Map Container (Top) -->
+          <div class="col-12">
+            <q-card class="shadow-2">
+              <div ref="mapContainer" id="map" style="height: 75vh; width: 100%;"></div>
+              <q-card-section class="q-py-sm">
+                <div class="row items-center q-gutter-md text-caption text-grey-8">
+                  <div class="flex items-center">
+                    <div style="width: 12px; height: 12px; border-radius: 50%; background: #10b981; margin-right: 6px;">
+                    </div>
+                    ตำแหน่ง Marker
+                  </div>
+                  <div class="flex items-center">
+                    <div style="width: 30px; height: 4px; border-radius: 2px; background: #2563eb; margin-right: 6px;">
+                    </div>
+                    ข้อมูล Popup
+                  </div>
+                </div>
+              </q-card-section>
+            </q-card>
+          </div>
+        </div>
 
         <div class="row q-col-gutter-md">
-          <!-- Map Container -->
-          <div class="col-12 col-md-9 order-last order-md-first">
-             <q-card class="shadow-2">
-               <div ref="mapContainer" id="map" style="height: 600px; width: 100%;"></div>
-               <q-card-section class="q-py-sm">
-                 <div class="row items-center q-gutter-md text-caption text-grey-8">
-                   <div class="flex items-center">
-                     <div style="width: 12px; height: 12px; border-radius: 50%; background: #10b981; margin-right: 6px;"></div>
-                     ตำแหน่ง Marker
-                   </div>
-                   <div class="flex items-center">
-                      <div style="width: 30px; height: 4px; border-radius: 2px; background: #2563eb; margin-right: 6px;"></div>
-                     ข้อมูล Popup
-                   </div>
-                 </div>
-               </q-card-section>
-             </q-card>
+          <!-- Controls Section (Below Map) -->
+          <div class="col-12 col-md-8">
+            <q-card class="my-card h-full">
+              <q-card-section class="bg-blue-grey-1">
+                <div class="row q-col-gutter-md items-end">
+                  <!-- Place Name -->
+                  <div class="col-12 col-md-6">
+                    <q-input v-model="placeName" label="ชื่อสถานที่ / อาคาร" placeholder="เช่น อาคารที่ 1" outlined
+                      dense bg-color="white" />
+                  </div>
+
+                  <!-- Lat -->
+                  <div class="col-6 col-md-3">
+                    <q-input v-model.number="lat" type="number" label="Latitude" placeholder="18.xxxx" outlined dense
+                      bg-color="white" step="0.000001" />
+                  </div>
+
+                  <!-- Lng -->
+                  <div class="col-6 col-md-3">
+                    <q-input v-model.number="lng" type="number" label="Longitude" placeholder="99.xxxx" outlined dense
+                      bg-color="white" step="0.000001" />
+                  </div>
+
+                  <!-- Address -->
+                  <div class="col-12">
+                    <q-input v-model="address" label="ค้นหาพิกัด (Geocoding)" placeholder="เช่น โรงเรียนวารี" outlined
+                      dense bg-color="white" @keyup.enter="handleGeocode">
+                      <template v-slot:append>
+                        <q-btn round dense flat icon="search" color="secondary" @click="handleGeocode"
+                          :loading="isGeocoding">
+                          <q-tooltip>ค้นหาพิกัด</q-tooltip>
+                        </q-btn>
+                      </template>
+                    </q-input>
+                  </div>
+
+                  <!-- Button Group -->
+                  <div class="col-12 row q-gutter-sm justify-end q-mt-sm">
+                    <q-btn unelevated color="positive" icon="add" label="บันทึกตำแหน่ง" @click="handleAddMarker" />
+
+                    <q-btn outline color="grey" label="ล้างค่า" @click="handleResetForm" />
+                  </div>
+                </div>
+              </q-card-section>
+
+              <!-- Result Message -->
+              <q-separator />
+              <q-banner v-if="resultMessage" dense class="bg-blue-1 text-primary">
+                <template v-slot:avatar>
+                  <q-icon name="info" color="primary" />
+                </template>
+                {{ resultMessage }}
+              </q-banner>
+            </q-card>
           </div>
 
-          <!-- Marker List -->
-          <div class="col-12 col-md-3 order-first order-md-last">
+          <!-- Marker List (Right of Form) -->
+          <div class="col-12 col-md-4">
             <q-card class="fit">
               <q-card-section>
-                 <div class="text-subtitle1 text-weight-bold q-mb-sm">
-                  Marker List ({{ markerNames.length }})
+                <div class="text-subtitle1 text-weight-bold q-mb-sm">
+                  รายการตำแหน่ง ({{ markerNames.length }})
                 </div>
-                <q-scroll-area style="height: 540px;">
+                <!-- Reduced height to match form approx -->
+                <q-scroll-area style="height: 300px;">
                   <q-list separator class="rounded-borders">
-                     <q-item v-if="markerNames.length === 0">
+                    <q-item v-if="markerNames.length === 0">
                       <q-item-section class="text-center text-grey text-italic">
                         ยังไม่มี Marker
                       </q-item-section>
                     </q-item>
-                    <q-item
-                      v-for="name in markerNames"
-                      :key="name"
-                      clickable
-                      v-ripple
-                      @click="handleMarkerListClick(name)"
-                    >
+                    <q-item v-for="name in markerNames" :key="name" clickable v-ripple
+                      @click="handleMarkerListClick(name)">
                       <q-item-section avatar min-width="0">
                         <q-icon name="place" color="green" size="sm" />
                       </q-item-section>
                       <q-item-section>
                         <q-item-label class="text-weight-medium">{{ name }}</q-item-label>
                         <q-item-label caption class="text-xs">
-                           {{ markerIndex[name].lat.toFixed(4) }}, {{ markerIndex[name].lng.toFixed(4) }}
+                          {{ markerIndex[name].lat.toFixed(4) }}, {{ markerIndex[name].lng.toFixed(4) }}
                         </q-item-label>
                       </q-item-section>
                     </q-item>
@@ -308,6 +261,7 @@ export default {
       if (this.markerIndex[key]) {
         this.markerIndex[key].marker.setLatLng([lat, lng]);
         this.markerIndex[key].marker.setPopupContent(popupContent);
+        this.markerIndex[key].marker.setTooltipContent(key) // Update tooltip content if name changes (unlikely key changes but good practice)
         this.markerIndex[key].lat = lat;
         this.markerIndex[key].lng = lng;
       } else {
@@ -315,11 +269,17 @@ export default {
           this.markersLayer
         );
         marker.bindPopup(popupContent);
+
+        // Permanent Label
+        marker.bindTooltip(key, {
+          permanent: true,
+          direction: 'bottom',
+          className: 'marker-label'
+        });
+
         marker.on('click', () => {
           marker.openPopup();
         });
-        // this.$set is Vue 2, Vue 3 doesn't need it for reactive objects usually, but if markerIndex is initialized in data() it is reactive.
-        // However, adding new property to object in Vue 3 is reactive by default if object is reactive.
         this.markerIndex[key] = { marker, lat, lng };
       }
 
@@ -397,7 +357,7 @@ export default {
         const result = await this.geocodeAddress(addr);
         if (!result) {
           this.resultMessage = '❌ ไม่พบพิกัดจากที่อยู่นี้';
-           this.q.notify({ type: 'negative', message: 'ไม่พบพิกัดจากที่อยู่นี้' });
+          this.q.notify({ type: 'negative', message: 'ไม่พบพิกัดจากที่อยู่นี้' });
         } else {
           this.lat = parseFloat(result.lat.toFixed(6));
           this.lng = parseFloat(result.lng.toFixed(6));
@@ -488,5 +448,16 @@ export default {
 
 :deep(.popup-content strong) {
   color: #1a202c;
+}
+
+:deep(.marker-label) {
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  color: #000;
+  font-weight: bold;
+  font-size: 14px;
+  text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff;
+  /* White outline for readability */
 }
 </style>
