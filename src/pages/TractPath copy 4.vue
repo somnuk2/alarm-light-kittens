@@ -32,7 +32,7 @@
                     <q-item-label class="text-weight-medium">สถานะการติดตาม</q-item-label>
                     <q-item-label caption v-if="isTracking" class="text-positive">
                       {{ currentLocation ? `${currentLocation.lat.toFixed(5)}, ${currentLocation.lng.toFixed(5)}` :
-                        'กำลังรอสัญญาณ GPS...' }}
+                      'กำลังรอสัญญาณ GPS...' }}
                     </q-item-label>
                     <q-item-label caption v-else>ไม่ได้ติดตามตำแหน่ง</q-item-label>
                   </q-item-section>
@@ -86,14 +86,8 @@
         </q-card-section>
       </q-card>
 
-      <q-card class="full-width relative-position"
-        style="max-width: 900px; border-radius: 16px; overflow: hidden; height: 500px;">
+      <q-card class="full-width" style="max-width: 900px; border-radius: 16px; overflow: hidden; height: 500px;">
         <div id="map-trace" class="full-height"></div>
-
-        <q-inner-loading :showing="isLoading">
-          <q-spinner-gears size="50px" color="primary" />
-          <div class="text-subtitle2 q-mt-sm">กำลังโหลดข้อมูลเส้นทาง...</div>
-        </q-inner-loading>
 
         <div class="absolute-bottom-left q-ma-md bg-white q-pa-sm rounded-borders shadow-2 z-max"
           style="opacity: 0.9; border: 1px solid #ddd;">
@@ -130,7 +124,7 @@ function safeLoadingShow(message) { $q.loading?.show?.({ message }); }
 function safeLoadingHide() { $q.loading?.hide?.(); }
 
 /* ---------- Cache ---------- */
-const CACHE_KEY = 'graph_cache_live_v2';
+const CACHE_KEY = 'graph_cache_live_v1';
 function loadCache() {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
@@ -161,15 +155,6 @@ const greenIcon = L.icon({
   shadowSize: [41, 41],
 });
 
-const redIcon = L.icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  shadowSize: [41, 41],
-});
-
 const userIcon = L.divIcon({
   className: 'user-marker-icon',
   html: '<div class="pulse-marker"></div>',
@@ -188,29 +173,21 @@ const autoRecenter = ref(true);
 
 const markerList = ref([]);
 const edgeList = ref([]);
-const isLoading = ref(false);
 
 /* ---------- nodesGraph from markers ONLY ---------- */
 const nodesGraph = computed(() => {
   const nodes = {};
   markerList.value.forEach(m => {
-    const lA = Number(m.lat);
-    const lN = Number(m.lng);
-    if (!m.name || isNaN(lA) || isNaN(lN)) return;
-    nodes[m.name] = { lat: lA, lng: lN, isSafeZone: !!m.isSafeZone };
+    const lat = Number(m.lat);
+    const lng = Number(m.lng);
+    if (!m.name || isNaN(lat) || isNaN(lng)) return;
+    nodes[m.name] = { lat, lng };
   });
   return nodes;
 });
 
 const destinationOptions = computed(() =>
-  Object.keys(nodesGraph.value).sort().map(name => {
-    const isSafe = nodesGraph.value[name]?.isSafeZone;
-    return {
-      label: isSafe ? `🚨 ${name} (จุดปลอดภัย)` : name,
-      value: name,
-      isSafe
-    };
-  })
+  Object.keys(nodesGraph.value).sort().map(name => ({ label: name, value: name }))
 );
 
 /* ---------- Stats ---------- */
@@ -250,24 +227,16 @@ function rebuildAdjacency() {
   });
   adjacency.value = adj;
 }
+
 watch([nodesGraph, edgeList], () => {
   rebuildAdjacency();
 });
 
-/* ---------- Pin logic: hover shows, click pins ---------- */
-let pinnedMarker = null; // Leaflet marker
-let pinnedEdge = null;   // Leaflet polyline
-function clearPins() {
-  if (pinnedMarker) { try { pinnedMarker.closePopup(); } catch { } }
-  if (pinnedEdge) { try { pinnedEdge.closeTooltip(); } catch { } }
-  pinnedMarker = null;
-  pinnedEdge = null;
-}
-
-/* ---------- Lifecycle ---------- */
+/* ---------- Init / Lifecycle ---------- */
 onMounted(async () => {
   initMap();
 
+  // cache-first
   const hasCache = loadCache();
   if (hasCache) drawBaseMap();
 
@@ -304,13 +273,12 @@ function initMap() {
   layers.history = L.layerGroup().addTo(map.value);
   layers.user = L.layerGroup().addTo(map.value);
 
-  map.value.on('dragstart', () => { autoRecenter.value = false; });
-
-  // ✅ click map clears pin
-  map.value.on('click', () => { clearPins(); });
+  map.value.on('dragstart', () => {
+    autoRecenter.value = false;
+  });
 }
 
-/* ---------- Data Loading ---------- */
+/* ---------- Data Loading (fast) ---------- */
 function fallbackEdgesFromConstants() {
   return SHARED_EDGES.map((e, i) => ({
     id: `seed-${i}`,
@@ -325,7 +293,6 @@ async function loadDataFast() {
   safeLoadingShow('กำลังดึงข้อมูลนำทาง...');
 
   try {
-    isLoading.value = true;
     const [markerResp, edgeResp] = await Promise.all([
       api.get('/api/markers'),
       api.get('/api/edges')
@@ -334,11 +301,13 @@ async function loadDataFast() {
     markerList.value = markerResp.data?.length ? markerResp.data : [...SHARED_LOCATIONS];
     edgeList.value = edgeResp.data?.length ? edgeResp.data : fallbackEdgesFromConstants();
 
+    // cleanup: remove edges with missing nodes
     edgeList.value = edgeList.value.filter(e => nodesGraph.value[e.nameA] && nodesGraph.value[e.nameB]);
 
     drawBaseMap();
     saveCache();
 
+    // default destination
     if (!selectedDestination.value && destinationOptions.value.length > 0) {
       selectedDestination.value = destinationOptions.value[0].value;
     }
@@ -351,16 +320,13 @@ async function loadDataFast() {
 
     drawBaseMap();
   } finally {
-    isLoading.value = false;
     safeLoadingHide();
   }
 }
 
-/* ---------- Draw base map (hover like click + click pins) ---------- */
+/* ---------- Draw base map (coords from markers only) ---------- */
 function drawBaseMap() {
   if (!map.value) return;
-
-  clearPins();
 
   layers.baseEdges.clearLayers();
   layers.nodes.clearLayers();
@@ -371,25 +337,7 @@ function drawBaseMap() {
   // nodes
   for (const name in nodesGraph.value) {
     const n = nodesGraph.value[name];
-    const isSafe = !!n.isSafeZone;
-    const targetIcon = isSafe ? redIcon : greenIcon;
-
-    const marker = L.marker([n.lat, n.lng], { icon: targetIcon })
-      .bindPopup(`<b>${name}</b>${isSafe ? ' <span style="color:red">(Safe Zone)</span>' : ''}<br>Lat: ${n.lat.toFixed(6)}<br>Lng: ${n.lng.toFixed(6)}`);
-
-    marker.on('mouseover', () => marker.openPopup());
-    marker.on('mouseout', () => {
-      if (pinnedMarker !== marker) marker.closePopup();
-    });
-    marker.on('click', () => {
-      if (pinnedMarker && pinnedMarker !== marker) {
-        try { pinnedMarker.closePopup(); } catch { }
-      }
-      pinnedMarker = marker;
-      marker.openPopup();
-    });
-
-    layers.nodes.addLayer(marker);
+    layers.nodes.addLayer(L.marker([n.lat, n.lng], { icon: greenIcon }).bindPopup(name));
     bounds.extend([n.lat, n.lng]);
     has = true;
   }
@@ -406,28 +354,7 @@ function drawBaseMap() {
       opacity: 0.6
     });
 
-    line.bindTooltip(`${e.distance}ม. / ${e.time}น.`, {
-      sticky: true,
-      direction: 'center',
-      className: 'edge-tooltip'
-    });
-
-    line.on('mouseover', () => line.openTooltip());
-    line.on('mouseout', () => {
-      if (pinnedEdge !== line) line.closeTooltip();
-    });
-    line.on('click', (ev) => {
-      ev?.originalEvent?.stopPropagation?.();
-      if (pinnedEdge && pinnedEdge !== line) {
-        try { pinnedEdge.closeTooltip(); } catch { }
-      }
-      pinnedEdge = line;
-      line.openTooltip();
-      line.bringToFront();
-    });
-
     layers.baseEdges.addLayer(line);
-
     bounds.extend([A.lat, A.lng]);
     bounds.extend([B.lat, B.lng]);
     has = true;
@@ -437,7 +364,10 @@ function drawBaseMap() {
 }
 
 /* ---------- Tracking ---------- */
-function toggleTracking() { isTracking.value ? stopTracking() : startTracking(); }
+function toggleTracking() {
+  if (isTracking.value) stopTracking();
+  else startTracking();
+}
 
 function startTracking() {
   if (!navigator.geolocation) {
@@ -479,12 +409,14 @@ let navThrottleTimer = null;
 function updateUserLocation(lat, lng) {
   currentLocation.value = { lat, lng };
 
+  // user marker (reuse)
   if (!userMarker) {
     userMarker = L.marker([lat, lng], { icon: userIcon }).addTo(layers.user);
   } else {
     userMarker.setLatLng([lat, lng]);
   }
 
+  // history path (reuse)
   userPathHistory.value.push([lat, lng]);
   if (userPathHistory.value.length > MAX_HISTORY_POINTS) {
     userPathHistory.value.splice(0, userPathHistory.value.length - MAX_HISTORY_POINTS);
@@ -500,6 +432,7 @@ function updateUserLocation(lat, lng) {
     map.value.flyTo([lat, lng], getResponsiveZoom(), { animate: true, duration: 0.5 });
   }
 
+  // throttle navigation updates
   if (selectedDestination.value) {
     clearTimeout(navThrottleTimer);
     navThrottleTimer = setTimeout(() => updateNavigation(), 900);
@@ -520,6 +453,7 @@ function onDestinationChange() {
   remainingStats.distance = 0;
   remainingStats.time = 0;
 
+  // clear route objects (reuse later)
   if (userToStartLine) { layers.route.removeLayer(userToStartLine); userToStartLine = null; }
   if (routeLine) { layers.route.removeLayer(routeLine); routeLine = null; }
 
@@ -571,7 +505,10 @@ function findNearestNode(lat, lng) {
   for (const name in nodesGraph.value) {
     const n = nodesGraph.value[name];
     const d = userLL.distanceTo(L.latLng(n.lat, n.lng));
-    if (d < minDist) { minDist = d; nearest = name; }
+    if (d < minDist) {
+      minDist = d;
+      nearest = name;
+    }
   }
   return { node: nearest, distance: minDist };
 }
@@ -591,8 +528,10 @@ function dijkstra(start, end) {
   while (pq.length) {
     pq.sort((a, b) => a.d - b.d);
     const { node: u, d } = pq.shift();
+
     if (visited.has(u)) continue;
     visited.add(u);
+
     if (u === end) break;
 
     (adjacency.value[u] || []).forEach(nb => {
@@ -609,13 +548,17 @@ function dijkstra(start, end) {
 
   const path = [];
   let cur = end;
-  while (cur) { path.unshift(cur); cur = prev[cur]; }
+  while (cur) {
+    path.unshift(cur);
+    cur = prev[cur];
+  }
   return { path, dist: dist[end] };
 }
 
 function drawRoute(path, userLoc) {
   if (!path?.length) return;
 
+  // dashed from user to first node
   if (userLoc && nodesGraph.value[path[0]]) {
     const startNode = nodesGraph.value[path[0]];
     const dashed = [[userLoc.lat, userLoc.lng], [startNode.lat, startNode.lng]];
@@ -643,16 +586,6 @@ function drawRoute(path, userLoc) {
 </script>
 
 <style scoped>
-:deep(.edge-tooltip) {
-  background: white;
-  border: 1px solid #3388ff;
-  color: #3388ff;
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-}
-
 :deep(.user-marker-icon) {
   background: transparent;
   border: none;
