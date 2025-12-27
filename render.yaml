@@ -6,12 +6,12 @@ services:
     region: singapore
     plan: free
     branch: main
-    rootDir: server
-    buildCommand: npm install && npx prisma generate
-    startCommand: npm start
+    rootDir: .
+    buildCommand: npm install && npm run build --prefix server && npm install && npx quasar build && cd server && npx prisma db push --accept-data-loss
+    startCommand: cd server && npm start
     envVars:
       - key: DATABASE_URL
         sync: false
       - key: NODE_ENV
         value: production
-    healthCheckPath: /api/markers
+    healthCheckPath: /

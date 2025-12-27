@@ -2,6 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -62,6 +67,10 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+// Serve Static Files from Quasar SPA
+const distPath = path.join(__dirname, '../dist/spa');
+app.use(express.static(distPath));
 
 // -----------------------------
 // Routes
@@ -260,6 +269,15 @@ app.delete('/api/edges/:id', async (req, res) => {
     console.error('Error deleting edge:', error);
     res.status(500).json({ error: 'Failed to delete edge' });
   }
+});
+
+// SPA Catch-all: Always serve index.html for unknown routes to handle client-side routing
+app.get('*', (req, res) => {
+  // Check if request is for /api or other excluded paths
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'API endpoint not found' });
+  }
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 // -----------------------------
