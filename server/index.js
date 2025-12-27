@@ -72,11 +72,9 @@ app.use(express.json());
 const distPath = path.join(__dirname, '../dist/spa');
 app.use(express.static(distPath));
 
-// -----------------------------
-// Routes
-// -----------------------------
-app.get('/', (_req, res) => {
-  res.json({ status: 'ok', message: 'Backend is running' });
+// Health check for Render
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', server: 'running' });
 });
 
 // Get all markers
@@ -285,6 +283,7 @@ app.get('*', (req, res) => {
 // -----------------------------
 const server = app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`Serving static files from: ${distPath}`);
 });
 
 async function shutdown(signal) {
