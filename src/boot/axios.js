@@ -18,7 +18,7 @@ import axios from 'axios'
 
 // Let's stick to the standard way that was there but ensure it works.
 const baseURL = process.env.NODE_ENV === 'production'
-  ? (typeof window !== 'undefined' ? window.location.origin : '')
+  ? ''
   : (process.env.VITE_API_BASE_URL || 'http://localhost:3000');
 const api = axios.create({ baseURL })
 

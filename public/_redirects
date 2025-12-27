@@ -1,0 +1,3 @@
+# Netlify Redirects for SPA and API Proxy
+/api/*  https://alarm-light-kittens.onrender.com/api/:splat  200
+/*      /index.html                                          200
