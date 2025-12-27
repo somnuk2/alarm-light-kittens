@@ -63,6 +63,13 @@
               </div>
             </div>
 
+            <!-- Voice Guidance Toggle -->
+            <div class="row items-center q-mt-sm justify-end">
+              <div class="col-auto">
+                <q-toggle v-model="voiceEnabled" color="secondary" icon="volume_up" label="เสียงนำทาง" />
+              </div>
+            </div>
+
             <div v-if="selectedDestination" class="row q-col-gutter-sm justify-center q-mt-md">
               <div class="col-auto">
                 <q-chip outline color="primary" icon="straighten" class="q-pa-md" style="height: 50px;">
@@ -87,6 +94,35 @@
               </div>
             </div>
 
+          </q-card-section>
+        </q-card>
+
+        <!-- Navigation Instructions -->
+        <q-card v-if="selectedDestination && instructions.length > 0" class="full-width shadow-2 q-mb-lg"
+          style="border-radius: 16px;">
+          <q-item class="bg-secondary text-white">
+            <q-item-section avatar>
+              <q-icon name="list" />
+            </q-item-section>
+            <q-item-section>
+              <q-item-label class="text-h6">ขั้นตอนการเดินทาง</q-item-label>
+            </q-item-section>
+          </q-item>
+          <q-card-section class="q-pa-none">
+            <q-list separator>
+              <q-item v-for="(step, idx) in instructions" :key="idx" :active="idx === currentStepIndex"
+                active-class="bg-blue-1 text-primary text-weight-bold">
+                <q-item-section avatar>
+                  <q-avatar size="32px" color="primary" text-color="white">{{ idx + 1 }}</q-avatar>
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>{{ step }}</q-item-label>
+                </q-item-section>
+                <q-item-section side v-if="idx === currentStepIndex">
+                  <q-icon name="directions_walk" color="primary" class="animate-bounce" />
+                </q-item-section>
+              </q-item>
+            </q-list>
           </q-card-section>
         </q-card>
 
@@ -194,6 +230,12 @@ const autoRecenter = ref(true);
 const markerList = ref([]);
 const edgeList = ref([]);
 const isLoading = ref(false);
+
+/* ---------- Voice & Text Nav ---------- */
+const voiceEnabled = ref(true);
+const instructions = ref([]);
+const currentStepIndex = ref(0);
+let lastSpokenStep = -1;
 
 /* ---------- nodesGraph from markers ONLY ---------- */
 const nodesGraph = computed(() => {
@@ -537,6 +579,9 @@ function onDestinationChange() {
   if (userToStartLine) { layers.route.removeLayer(userToStartLine); userToStartLine = null; }
   if (routeLine) { layers.route.removeLayer(routeLine); routeLine = null; }
 
+  currentStepIndex.value = 0;
+  lastSpokenStep = -1;
+
   if (selectedDestination.value) updateNavigation();
 }
 
@@ -575,6 +620,75 @@ function updateNavigation() {
 
   remainingStats.distance = Math.round(totalDistance);
   remainingStats.time = Math.round(totalTimeMin);
+
+  generateInstructions(res.path, distToStart);
+}
+
+function generateInstructions(path, distToStart) {
+  if (!path || path.length === 0) {
+    instructions.value = [];
+    return;
+  }
+
+  const steps = [];
+  const waypoints = []; // LatLngs of nodes in path
+
+  if (distToStart > 12) {
+    steps.push(`เดินไปที่จุดเริ่มต้น: ${path[0]}`);
+    waypoints.push(null); // start point is current location or handled differently
+  }
+
+  for (let i = 0; i < path.length - 1; i++) {
+    steps.push(`จาก ${path[i]} เดินต่อไปยัง ${path[i + 1]}`);
+    const node = nodesGraph.value[path[i + 1]];
+    waypoints.push(node ? L.latLng(node.lat, node.lng) : null);
+  }
+
+  const endNode = nodesGraph.value[path[path.length - 1]];
+  steps.push(`คุณถึงที่หมายแล้ว: ${path[path.length - 1]}`);
+  waypoints.push(endNode ? L.latLng(endNode.lat, endNode.lng) : null);
+
+  instructions.value = steps;
+
+  // Real-time tracking of current step
+  if (currentLocation.value) {
+    const userLL = L.latLng(currentLocation.value.lat, currentLocation.value.lng);
+    let bestStep = 0;
+
+    // Find the furthest waypoint we are "at" or the next one we are heading to
+    for (let i = 0; i < waypoints.length; i++) {
+      if (!waypoints[i]) continue;
+      const d = userLL.distanceTo(waypoints[i]);
+      if (d < 10) { // If within 10 meters of a node
+        bestStep = i + 1;
+      }
+    }
+
+    // Ensure we don't go backwards in instruction tracking
+    if (bestStep > currentStepIndex.value) {
+      currentStepIndex.value = Math.min(bestStep, steps.length - 1);
+    }
+  }
+
+  // Speak if step changed
+  if (voiceEnabled.value && lastSpokenStep !== currentStepIndex.value) {
+    const textToSpeak = steps[currentStepIndex.value];
+    if (textToSpeak) speakInstruction(textToSpeak);
+    lastSpokenStep = currentStepIndex.value;
+  }
+}
+
+function speakInstruction(text) {
+  if (!voiceEnabled.value) return;
+  if (!window.speechSynthesis) return;
+
+  // Cancel previous speech
+  window.speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'th-TH';
+  utterance.rate = 0.9;
+  window.speechSynthesis.speak(utterance);
 }
 
 function findNearestNode(lat, lng) {
@@ -707,6 +821,24 @@ function drawRoute(path, userLoc) {
   100% {
     transform: translate(-50%, -50%) scale(2.5);
     opacity: 0;
+  }
+}
+
+.animate-bounce {
+  animation: bounce 1s infinite;
+}
+
+@keyframes bounce {
+
+  0%,
+  100% {
+    transform: translateY(-25%);
+    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+  }
+
+  50% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
   }
 }
 
