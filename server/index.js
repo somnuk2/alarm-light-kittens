@@ -3,53 +3,67 @@ import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
 const app = express();
+app.disable('x-powered-by');
+
+// Render / reverse proxy (สำคัญเวลาอยู่หลัง proxy)
+app.set('trust proxy', 1);
+
 const prisma = new PrismaClient();
 const PORT = Number(process.env.PORT || 3000);
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // -----------------------------
-// Utilities
+// Utils (validation / helpers)
 // -----------------------------
-function toNumber(v) {
+function parseNumber(v) {
+  if (v === undefined || v === null || v === '') return undefined;
   const n = typeof v === 'string' ? Number(v) : v;
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) ? n : null; // null = invalid
 }
 
 /**
- * normalize boolean input
- * - returns `undefined` when v is undefined (means "not provided")
- * - returns boolean for a wide range of inputs
+ * parseBoolean
+ * - undefined => "not provided"
+ * - boolean => boolean
+ * - string/number common forms => boolean
+ * - otherwise => null (invalid)  ✅ ไม่เดาสุ่มเป็น false
  */
-function normalizeBoolOrUndefined(v) {
+function parseBoolean(v) {
   if (v === undefined) return undefined;
-
   if (typeof v === 'boolean') return v;
-
   if (typeof v === 'number') {
     if (v === 1) return true;
     if (v === 0) return false;
+    return null;
   }
-
   if (typeof v === 'string') {
     const s = v.trim().toLowerCase();
-    if (s === 'true' || s === '1' || s === 'yes' || s === 'y') return true;
-    if (s === 'false' || s === '0' || s === 'no' || s === 'n') return false;
+    if (['true', '1', 'yes', 'y'].includes(s)) return true;
+    if (['false', '0', 'no', 'n'].includes(s)) return false;
+    return null;
   }
-
-  // fallback: treat other weird values as false
-  return false;
+  return null;
 }
 
 function pickDefined(obj) {
-  // remove keys with value `undefined` (Prisma won't update those)
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+}
+
+function asyncHandler(fn) {
+  return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+}
+
+function isPrismaNotFound(err) {
+  // Prisma "Record to update/delete not found." => P2025
+  return err && typeof err === 'object' && err.code === 'P2025';
 }
 
 // -----------------------------
@@ -60,90 +74,117 @@ app.use((req, _res, next) => {
   next();
 });
 
+// CORS: รองรับ allowlist แบบ "a.com,b.com" หรือ "*" (default)
+function buildCorsOrigin() {
+  const raw = (process.env.CORS_ORIGIN || '*').trim();
+  if (raw === '*' || raw === '') return '*';
+  const allow = raw.split(',').map(s => s.trim()).filter(Boolean);
+  return function origin(origin, cb) {
+    // origin อาจเป็น undefined (เช่น curl / server-to-server)
+    if (!origin) return cb(null, true);
+    if (allow.includes(origin)) return cb(null, true);
+    return cb(new Error(`CORS blocked: ${origin}`));
+  };
+}
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: buildCorsOrigin(),
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-app.use(express.json());
+app.options('*', cors());
+app.use(express.json({ limit: '1mb' }));
 
-// Serve Static Files from Quasar SPA
-const distPath = path.join(__dirname, '../dist/spa');
-app.use(express.static(distPath));
+// -----------------------------
+// Static SPA (Quasar) - robust
+// -----------------------------
+// พยายามหา dist/spa จากหลายตำแหน่ง (กันกรณี build แล้ว path เปลี่ยน)
+const distCandidates = [
+  path.join(__dirname, '../dist/spa'),
+  path.join(__dirname, '../../dist/spa'),
+  path.join(process.cwd(), 'dist/spa'),
+];
 
-// Health check for Render
+const distPath = distCandidates.find(p => fs.existsSync(path.join(p, 'index.html')));
+
+if (distPath) {
+  console.log(`✅ Serving static SPA from: ${distPath}`);
+  app.use(express.static(distPath));
+} else {
+  console.warn('⚠️  SPA build not found (index.html missing). Root (/) will return API info instead.');
+}
+
+// -----------------------------
+// Routes
+// -----------------------------
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', server: 'running' });
+  res.json({ status: 'ok', server: 'running', time: new Date().toISOString() });
 });
 
-// Get all markers
-app.get('/api/markers', async (_req, res) => {
-  try {
-    const markers = await prisma.marker.findMany({ orderBy: { name: 'asc' } });
-    res.json(markers);
-  } catch (error) {
-    console.error('Error fetching markers:', error);
-    res.status(500).json({ error: 'Failed to fetch markers' });
-  }
+// ให้ / ตอบเสมอ (ไม่เจอ dist ก็ไม่ขึ้น Cannot GET /)
+app.get('/', (req, res) => {
+  if (distPath) return res.sendFile(path.join(distPath, 'index.html'));
+  res.json({ ok: true, message: 'Backend is running. Try /api/health' });
 });
+
+// -----------------------------
+// Markers
+// -----------------------------
+app.get('/api/markers', asyncHandler(async (_req, res) => {
+  const markers = await prisma.marker.findMany({ orderBy: { name: 'asc' } });
+  res.json(markers);
+}));
 
 /**
- * Create or Update marker (UPSERT by name)
+ * Create/Update marker (UPSERT by name)
  * Required: name, lat, lng
  * Optional: isSafeZone
- *
- * ✅ Important fix: if isSafeZone is not provided => do NOT update it (prevents reset to false)
+ * - ถ้าไม่ส่ง isSafeZone มา => ไม่ไปแก้ค่าเดิม
  */
-app.post('/api/markers', async (req, res) => {
+app.post('/api/markers', asyncHandler(async (req, res) => {
   const { name, lat, lng, isSafeZone } = req.body ?? {};
 
   const safeName = String(name ?? '').trim();
-  const latN = toNumber(lat);
-  const lngN = toNumber(lng);
-  const safe = normalizeBoolOrUndefined(isSafeZone);
+  const latN = parseNumber(lat);
+  const lngN = parseNumber(lng);
+  const safe = parseBoolean(isSafeZone);
 
-  if (!safeName || latN === null || lngN === null) {
-    return res.status(400).json({ error: 'Missing/invalid required fields: name, lat, lng' });
+  if (!safeName) return res.status(400).json({ error: 'Missing required field: name' });
+  if (latN === null || lngN === null || latN === undefined || lngN === undefined) {
+    return res.status(400).json({ error: 'Missing/invalid required fields: lat, lng' });
   }
+  if (safe === null) return res.status(400).json({ error: 'Invalid isSafeZone (expect true/false/1/0)' });
 
-  try {
-    const marker = await prisma.marker.upsert({
-      where: { name: safeName },
-      update: pickDefined({
-        lat: latN,
-        lng: lngN,
-        isSafeZone: safe, // ✅ update only if provided
-      }),
-      create: {
-        name: safeName,
-        lat: latN,
-        lng: lngN,
-        isSafeZone: safe ?? false,
-      },
-    });
+  const marker = await prisma.marker.upsert({
+    where: { name: safeName },
+    update: pickDefined({
+      lat: latN,
+      lng: lngN,
+      isSafeZone: safe, // ✅ update เฉพาะเมื่อส่งมา (safe !== undefined)
+    }),
+    create: {
+      name: safeName,
+      lat: latN,
+      lng: lngN,
+      isSafeZone: safe ?? false,
+    },
+  });
 
-    res.json(marker);
-  } catch (error) {
-    console.error('Error saving marker:', error);
-    res.status(500).json({ error: 'Failed to save marker' });
-  }
-});
+  res.json(marker);
+}));
 
-// Optional (recommended): PATCH marker partial update
-app.patch('/api/markers/:name', async (req, res) => {
+app.patch('/api/markers/:name', asyncHandler(async (req, res) => {
   const name = String(req.params.name ?? '').trim();
   if (!name) return res.status(400).json({ error: 'Missing name param' });
 
   const { lat, lng, isSafeZone } = req.body ?? {};
+  const latN = parseNumber(lat);
+  const lngN = parseNumber(lng);
+  const safe = parseBoolean(isSafeZone);
 
-  const latN = lat === undefined ? undefined : toNumber(lat);
-  const lngN = lng === undefined ? undefined : toNumber(lng);
-  const safe = normalizeBoolOrUndefined(isSafeZone);
-
-  if (latN === null || lngN === null) {
-    return res.status(400).json({ error: 'Invalid lat/lng' });
-  }
+  if (latN === null || lngN === null) return res.status(400).json({ error: 'Invalid lat/lng' });
+  if (safe === null) return res.status(400).json({ error: 'Invalid isSafeZone (expect true/false/1/0)' });
 
   try {
     const updated = await prisma.marker.update({
@@ -155,127 +196,132 @@ app.patch('/api/markers/:name', async (req, res) => {
       }),
     });
     res.json(updated);
-  } catch (error) {
-    console.error('Error patching marker:', error);
-    res.status(500).json({ error: 'Failed to patch marker' });
+  } catch (err) {
+    if (isPrismaNotFound(err)) return res.status(404).json({ error: 'Marker not found' });
+    throw err;
   }
-});
+}));
 
-// Delete marker
-app.delete('/api/markers/:name', async (req, res) => {
+app.delete('/api/markers/:name', asyncHandler(async (req, res) => {
   const name = String(req.params.name ?? '').trim();
   if (!name) return res.status(400).json({ error: 'Missing name param' });
 
   try {
     await prisma.marker.delete({ where: { name } });
     res.json({ message: 'Marker deleted' });
-  } catch (error) {
-    console.error('Error deleting marker:', error);
-    res.status(500).json({ error: 'Failed to delete marker' });
+  } catch (err) {
+    if (isPrismaNotFound(err)) return res.status(404).json({ error: 'Marker not found' });
+    throw err;
   }
-});
+}));
 
-// Get all edges
-app.get('/api/edges', async (_req, res) => {
-  try {
-    const edges = await prisma.edge.findMany({ orderBy: { id: 'asc' } });
-    res.json(edges);
-  } catch (error) {
-    console.error('Error fetching edges:', error);
-    res.status(500).json({ error: 'Failed to fetch edges' });
-  }
-});
+// -----------------------------
+// Edges
+// -----------------------------
+app.get('/api/edges', asyncHandler(async (_req, res) => {
+  const edges = await prisma.edge.findMany({ orderBy: { id: 'asc' } });
+  res.json(edges);
+}));
 
-// Create or Update edge
-app.post('/api/edges', async (req, res) => {
+app.post('/api/edges', asyncHandler(async (req, res) => {
   const { id, nameA, latA, lngA, nameB, latB, lngB, distance, time } = req.body ?? {};
 
-  const latAN = toNumber(latA);
-  const lngAN = toNumber(lngA);
-  const latBN = toNumber(latB);
-  const lngBN = toNumber(lngB);
-  const distN = toNumber(distance);
-  const timeN = toNumber(time);
+  const idN = parseNumber(id);
+  const latAN = parseNumber(latA);
+  const lngAN = parseNumber(lngA);
+  const latBN = parseNumber(latB);
+  const lngBN = parseNumber(lngB);
+  const distN = parseNumber(distance);
+  const timeN = parseNumber(time);
 
-  if (!nameA || !nameB || latAN === null || lngAN === null || latBN === null || lngBN === null) {
-    return res.status(400).json({ error: 'Missing/invalid required fields for edge' });
+  const a = String(nameA ?? '').trim();
+  const b = String(nameB ?? '').trim();
+
+  if (!a || !b) return res.status(400).json({ error: 'Missing required fields: nameA, nameB' });
+  if ([latAN, lngAN, latBN, lngBN].some(v => v === null || v === undefined)) {
+    return res.status(400).json({ error: 'Missing/invalid required fields for edge: latA/lngA/latB/lngB' });
+  }
+  if (idN === null) return res.status(400).json({ error: 'Invalid id' });
+  if (distN === null) return res.status(400).json({ error: 'Invalid distance' });
+  if (timeN === null) return res.status(400).json({ error: 'Invalid time' });
+
+  const data = {
+    nameA: a,
+    latA: latAN,
+    lngA: lngAN,
+    nameB: b,
+    latB: latBN,
+    lngB: lngBN,
+    distance: distN ?? 0,
+    time: timeN ?? 0,
+  };
+
+  // ถ้ามี id => update ตาม id
+  if (idN !== undefined) {
+    try {
+      const edge = await prisma.edge.update({ where: { id: Number(idN) }, data });
+      return res.json(edge);
+    } catch (err) {
+      if (isPrismaNotFound(err)) return res.status(404).json({ error: 'Edge not found' });
+      throw err;
+    }
   }
 
-  try {
-    if (id) {
-      const edge = await prisma.edge.update({
-        where: { id: Number(id) },
-        data: {
-          nameA,
-          latA: latAN,
-          lngA: lngAN,
-          nameB,
-          latB: latBN,
-          lngB: lngBN,
-          distance: distN ?? 0,
-          time: timeN ?? 0,
-        },
-      });
-      return res.json(edge);
-    }
+  // ไม่ส่ง id => upsert แบบ symmetric pair
+  const existingEdge = await prisma.edge.findFirst({
+    where: {
+      OR: [
+        { nameA: a, nameB: b },
+        { nameA: b, nameB: a },
+      ],
+    },
+  });
 
-    const existingEdge = await prisma.edge.findFirst({
-      where: {
-        OR: [
-          { nameA, nameB },
-          { nameA: nameB, nameB: nameA },
-        ],
-      },
-    });
-
-    const data = {
-      nameA,
-      latA: latAN,
-      lngA: lngAN,
-      nameB,
-      latB: latBN,
-      lngB: lngBN,
-      distance: distN ?? 0,
-      time: timeN ?? 0,
-    };
-
-    if (existingEdge) {
-      const edge = await prisma.edge.update({
-        where: { id: existingEdge.id },
-        data,
-      });
-      return res.json(edge);
-    }
-
-    const edge = await prisma.edge.create({ data });
-    res.json(edge);
-  } catch (error) {
-    console.error('Error saving edge:', error);
-    res.status(500).json({ error: 'Failed to save edge' });
+  if (existingEdge) {
+    const edge = await prisma.edge.update({ where: { id: existingEdge.id }, data });
+    return res.json(edge);
   }
-});
 
-// Delete edge
-app.delete('/api/edges/:id', async (req, res) => {
+  const edge = await prisma.edge.create({ data });
+  res.json(edge);
+}));
+
+app.delete('/api/edges/:id', asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
 
   try {
     await prisma.edge.delete({ where: { id } });
     res.json({ message: 'Edge deleted' });
-  } catch (error) {
-    console.error('Error deleting edge:', error);
-    res.status(500).json({ error: 'Failed to delete edge' });
+  } catch (err) {
+    if (isPrismaNotFound(err)) return res.status(404).json({ error: 'Edge not found' });
+    throw err;
   }
-});
+}));
 
-// SPA Catch-all: Always serve index.html for unknown routes to handle client-side routing
+// -----------------------------
+// SPA Catch-all (ต้องอยู่ท้ายสุด)
+// -----------------------------
 app.get('*', (req, res) => {
-  // Check if request is for /api or other excluded paths
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'API endpoint not found' });
   }
-  res.sendFile(path.join(distPath, 'index.html'));
+  if (distPath) return res.sendFile(path.join(distPath, 'index.html'));
+  return res.status(404).json({ error: 'Not found' });
+});
+
+// -----------------------------
+// Error handler (สุดท้ายจริงๆ)
+// -----------------------------
+app.use((err, req, res, _next) => {
+  console.error('❌ Error:', err);
+
+  // CORS error
+  if (String(err?.message || '').startsWith('CORS blocked:')) {
+    return res.status(403).json({ error: err.message });
+  }
+
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 // -----------------------------
@@ -283,7 +329,6 @@ app.get('*', (req, res) => {
 // -----------------------------
 const server = app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
-  console.log(`Serving static files from: ${distPath}`);
 });
 
 async function shutdown(signal) {
@@ -291,6 +336,8 @@ async function shutdown(signal) {
   server.close(async () => {
     try {
       await prisma.$disconnect();
+    } catch (e) {
+      console.error('Error disconnecting Prisma:', e);
     } finally {
       process.exit(0);
     }
