@@ -24,7 +24,8 @@
               </q-card-section>
 
               <q-card-section class="relative-position">
-                <div id="map-path" class="rounded-borders shadow-1" style="height: 650px; width: 100%; z-index: 1;" />
+                <div id="map-path" class="rounded-borders shadow-1 map-responsive-height"
+                  style="width: 100%; z-index: 1;" />
 
                 <q-inner-loading :showing="isLoadingMarkers">
                   <q-spinner-gears size="50px" color="primary" />
@@ -399,6 +400,14 @@ function initMap() {
   map.value.on('click', () => {
     clearPins();
   });
+
+  window.addEventListener('resize', onWindowResize);
+}
+
+function onWindowResize() {
+  if (map.value) {
+    map.value.invalidateSize();
+  }
 }
 
 function resetHighlight() {
@@ -463,9 +472,9 @@ function updateMapVisuals() {
     });
 
     poly.bindTooltip(`${e.distance}ม. / ${e.time}น.`, {
-      sticky: true,
+      permanent: true,
       direction: 'center',
-      className: 'edge-tooltip'
+      className: 'edge-label-style'
     });
 
     poly.on('mouseover', () => poly.openTooltip());
@@ -849,17 +858,24 @@ onBeforeUnmount(() => {
     map.value.remove();
     map.value = null;
   }
+  window.removeEventListener('resize', onWindowResize);
 });
 </script>
 
 <style scoped>
-:deep(.edge-tooltip) {
-  background: white;
+:deep(.edge-label-style) {
+  background: rgba(255, 255, 255, 0.9);
   border: 1px solid #3388ff;
   color: #3388ff;
   font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+}
+
+.map-responsive-height {
+  height: clamp(400px, 70vh, 750px);
 }
 </style>

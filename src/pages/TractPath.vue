@@ -1,109 +1,114 @@
 <template>
   <q-page padding class="bg-grey-2">
-    <div class="column q-gutter-md items-center full-width">
-      <div class="text-center q-mb-md">
-        <div class="text-h4 text-weight-bold">🗺️ การนำทางไปจุดปลอดภัย</div>
-        <div class="text-subtitle1 text-grey-7">โรงเรียนวารีเชียงใหม่ - ระบบนำทางแบบสด (Real-time)</div>
+    <div class="row justify-center">
+      <div class="col-12 col-xl-10">
+        <h1 class="text-h4 text-center text-weight-bold q-mb-xs text-primary">
+          🗺️ การนำทางไปจุดปลอดภัย
+        </h1>
+        <p class="text-subtitle1 text-center text-grey-7 q-mb-lg">
+          โรงเรียนวารีเชียงใหม่ - ระบบนำทางแบบสด (Real-time)
+        </p>
+
+        <q-card class="full-width shadow-2 q-mb-lg" style="border-radius: 16px; overflow: hidden;">
+          <q-item class="bg-primary text-white q-py-md">
+            <q-item-section avatar>
+              <q-icon name="explore" size="md" />
+            </q-item-section>
+            <q-item-section>
+              <q-item-label class="text-h6">ระบบนำทางอัจฉริยะ</q-item-label>
+              <q-item-label caption class="text-white opacity-80">
+                ติดตามตำแหน่งและนำทางไปยังจุดที่สั้นที่สุด
+              </q-item-label>
+            </q-item-section>
+          </q-item>
+
+          <q-card-section class="q-pa-sm q-pa-md-md">
+            <div class="row q-col-gutter-md items-center">
+              <div class="col-12 col-sm-6">
+                <q-card flat bordered class="bg-grey-1" style="border-radius: 12px;">
+                  <q-item>
+                    <q-item-section avatar>
+                      <q-icon :name="isTracking ? 'directions_run' : 'location_off'"
+                        :color="isTracking ? 'positive' : 'grey-6'" size="md" />
+                    </q-item-section>
+                    <q-item-section>
+                      <q-item-label class="text-weight-medium">สถานะการติดตาม</q-item-label>
+                      <q-item-label caption v-if="isTracking" class="text-positive">
+                        {{ currentLocation ? `${currentLocation.lat.toFixed(5)}, ${currentLocation.lng.toFixed(5)}` :
+                          'กำลังรอสัญญาณ GPS...' }}
+                      </q-item-label>
+                      <q-item-label caption v-else>ไม่ได้ติดตามตำแหน่ง</q-item-label>
+                    </q-item-section>
+                    <q-item-section side>
+                      <q-btn :color="isTracking ? 'negative' : 'primary'" :label="isTracking ? 'หยุด' : 'เริ่ม'"
+                        :loading="geoLoading" rounded unelevated @click="toggleTracking" />
+                    </q-item-section>
+                  </q-item>
+                </q-card>
+              </div>
+
+              <div class="col-12 col-sm-6">
+                <q-select v-model="selectedDestination" :options="destinationOptions" emit-value map-options
+                  label="🎯 เลือกจุดหมายปลายทาง" outlined dense bg-color="white"
+                  :disable="destinationOptions.length === 0" @update:model-value="onDestinationChange">
+                  <template #prepend>
+                    <q-icon name="place" color="secondary" />
+                  </template>
+                  <template #append>
+                    <q-btn v-if="currentLocation" flat round dense icon="my_location" @click.stop="recenterMap">
+                      <q-tooltip>ตำแหน่งคุณ</q-tooltip>
+                    </q-btn>
+                  </template>
+                </q-select>
+              </div>
+            </div>
+
+            <div v-if="selectedDestination" class="row q-col-gutter-sm justify-center q-mt-md">
+              <div class="col-auto">
+                <q-chip outline color="primary" icon="straighten" class="q-pa-md" style="height: 50px;">
+                  <div class="column items-center">
+                    <div class="text-caption text-weight-bold">ระยะทางทั้งหมด</div>
+                    <div class="text-subtitle1">
+                      {{ totalStats.distance }} ม. ({{ formatTime(totalStats.time * 60) }})
+                    </div>
+                  </div>
+                </q-chip>
+              </div>
+              <div class="col-auto">
+                <q-chip color="secondary" text-color="white" icon="directions_walk" class="q-pa-md"
+                  style="height: 50px;">
+                  <div class="column items-center">
+                    <div class="text-caption text-weight-bold">เหลืออีก</div>
+                    <div class="text-subtitle1">
+                      {{ remainingStats.distance }} ม. ({{ formatTime(remainingStats.time * 60) }})
+                    </div>
+                  </div>
+                </q-chip>
+              </div>
+            </div>
+
+          </q-card-section>
+        </q-card>
+
+        <q-card class="full-width relative-position shadow-2 map-container-card"
+          style="border-radius: 16px; overflow: hidden;">
+          <div id="map-trace" class="full-height"></div>
+
+          <q-inner-loading :showing="isLoading">
+            <q-spinner-gears size="50px" color="primary" />
+            <div class="text-subtitle2 q-mt-sm">กำลังโหลดข้อมูลเส้นทาง...</div>
+          </q-inner-loading>
+
+          <div class="absolute-bottom-left q-ma-md bg-white q-pa-sm rounded-borders shadow-2 z-max"
+            style="opacity: 0.9; border: 1px solid #ddd;">
+            <div class="row q-gutter-sm items-center no-wrap">
+              <div class="row items-center no-wrap"><q-badge rounded color="blue" class="q-mr-xs" /> คุณ</div>
+              <div class="row items-center no-wrap"><q-badge rounded color="orange" class="q-mr-xs" /> รอยเท้า</div>
+              <div class="row items-center no-wrap"><q-badge rounded color="red" class="q-mr-xs" /> เส้นทาง</div>
+            </div>
+          </div>
+        </q-card>
       </div>
-
-      <q-card class="full-width" style="max-width: 900px; border-radius: 16px; overflow: hidden;">
-        <q-item class="bg-primary text-white q-py-md">
-          <q-item-section avatar>
-            <q-icon name="explore" size="md" />
-          </q-item-section>
-          <q-item-section>
-            <q-item-label class="text-h6">ระบบนำทางอัจฉริยะ</q-item-label>
-            <q-item-label caption class="text-white opacity-80">
-              ติดตามตำแหน่งและนำทางไปยังจุดที่สั้นที่สุด
-            </q-item-label>
-          </q-item-section>
-        </q-item>
-
-        <q-card-section class="q-pa-md">
-          <div class="row q-col-gutter-md items-center">
-            <div class="col-12 col-sm-6">
-              <q-card flat bordered class="bg-grey-1" style="border-radius: 12px;">
-                <q-item>
-                  <q-item-section avatar>
-                    <q-icon :name="isTracking ? 'directions_run' : 'location_off'"
-                      :color="isTracking ? 'positive' : 'grey-6'" size="md" />
-                  </q-item-section>
-                  <q-item-section>
-                    <q-item-label class="text-weight-medium">สถานะการติดตาม</q-item-label>
-                    <q-item-label caption v-if="isTracking" class="text-positive">
-                      {{ currentLocation ? `${currentLocation.lat.toFixed(5)}, ${currentLocation.lng.toFixed(5)}` :
-                        'กำลังรอสัญญาณ GPS...' }}
-                    </q-item-label>
-                    <q-item-label caption v-else>ไม่ได้ติดตามตำแหน่ง</q-item-label>
-                  </q-item-section>
-                  <q-item-section side>
-                    <q-btn :color="isTracking ? 'negative' : 'primary'" :label="isTracking ? 'หยุด' : 'เริ่ม'"
-                      :loading="geoLoading" rounded unelevated @click="toggleTracking" />
-                  </q-item-section>
-                </q-item>
-              </q-card>
-            </div>
-
-            <div class="col-12 col-sm-6">
-              <q-select v-model="selectedDestination" :options="destinationOptions" emit-value map-options
-                label="🎯 เลือกจุดหมายปลายทาง" outlined dense bg-color="white"
-                :disable="destinationOptions.length === 0" @update:model-value="onDestinationChange">
-                <template #prepend>
-                  <q-icon name="place" color="secondary" />
-                </template>
-                <template #append>
-                  <q-btn v-if="currentLocation" flat round dense icon="my_location" @click.stop="recenterMap">
-                    <q-tooltip>ตำแหน่งคุณ</q-tooltip>
-                  </q-btn>
-                </template>
-              </q-select>
-            </div>
-          </div>
-
-          <div v-if="selectedDestination" class="row q-col-gutter-sm justify-center q-mt-md">
-            <div class="col-auto">
-              <q-chip outline color="primary" icon="straighten" class="q-pa-md" style="height: 50px;">
-                <div class="column items-center">
-                  <div class="text-caption text-weight-bold">ระยะทางทั้งหมด</div>
-                  <div class="text-subtitle1">
-                    {{ totalStats.distance }} ม. ({{ formatTime(totalStats.time * 60) }})
-                  </div>
-                </div>
-              </q-chip>
-            </div>
-            <div class="col-auto">
-              <q-chip color="secondary" text-color="white" icon="directions_walk" class="q-pa-md" style="height: 50px;">
-                <div class="column items-center">
-                  <div class="text-caption text-weight-bold">เหลืออีก</div>
-                  <div class="text-subtitle1">
-                    {{ remainingStats.distance }} ม. ({{ formatTime(remainingStats.time * 60) }})
-                  </div>
-                </div>
-              </q-chip>
-            </div>
-          </div>
-
-        </q-card-section>
-      </q-card>
-
-      <q-card class="full-width relative-position"
-        style="max-width: 900px; border-radius: 16px; overflow: hidden; height: 500px;">
-        <div id="map-trace" class="full-height"></div>
-
-        <q-inner-loading :showing="isLoading">
-          <q-spinner-gears size="50px" color="primary" />
-          <div class="text-subtitle2 q-mt-sm">กำลังโหลดข้อมูลเส้นทาง...</div>
-        </q-inner-loading>
-
-        <div class="absolute-bottom-left q-ma-md bg-white q-pa-sm rounded-borders shadow-2 z-max"
-          style="opacity: 0.9; border: 1px solid #ddd;">
-          <div class="row q-gutter-sm items-center no-wrap">
-            <div class="row items-center no-wrap"><q-badge rounded color="blue" class="q-mr-xs" /> คุณ</div>
-            <div class="row items-center no-wrap"><q-badge rounded color="orange" class="q-mr-xs" /> รอยเท้า</div>
-            <div class="row items-center no-wrap"><q-badge rounded color="red" class="q-mr-xs" /> เส้นทาง</div>
-          </div>
-        </div>
-      </q-card>
     </div>
   </q-page>
 </template>
@@ -280,6 +285,7 @@ onBeforeUnmount(() => {
     map.value.remove();
     map.value = null;
   }
+  window.removeEventListener('resize', onWindowResize);
 });
 
 function getResponsiveZoom() {
@@ -308,6 +314,14 @@ function initMap() {
 
   // ✅ click map clears pin
   map.value.on('click', () => { clearPins(); });
+
+  window.addEventListener('resize', onWindowResize);
+}
+
+function onWindowResize() {
+  if (map.value) {
+    map.value.invalidateSize();
+  }
 }
 
 /* ---------- Data Loading ---------- */
@@ -407,9 +421,9 @@ function drawBaseMap() {
     });
 
     line.bindTooltip(`${e.distance}ม. / ${e.time}น.`, {
-      sticky: true,
+      permanent: true,
       direction: 'center',
-      className: 'edge-tooltip'
+      className: 'edge-label-style'
     });
 
     line.on('mouseover', () => line.openTooltip());
@@ -643,14 +657,17 @@ function drawRoute(path, userLoc) {
 </script>
 
 <style scoped>
-:deep(.edge-tooltip) {
-  background: white;
+:deep(.edge-label-style) {
+  background: rgba(255, 255, 255, 0.9);
   border: 1px solid #3388ff;
   color: #3388ff;
   font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+  z-index: 1000;
 }
 
 :deep(.user-marker-icon) {
@@ -691,6 +708,21 @@ function drawRoute(path, userLoc) {
     transform: translate(-50%, -50%) scale(2.5);
     opacity: 0;
   }
+}
+
+.main-card-width {
+  max-width: 900px;
+}
+
+@media (max-width: 600px) {
+  .main-card-width {
+    max-width: 100%;
+    border-radius: 0 !important;
+  }
+}
+
+.map-container-card {
+  height: clamp(400px, 70vh, 750px);
 }
 
 .opacity-80 {
