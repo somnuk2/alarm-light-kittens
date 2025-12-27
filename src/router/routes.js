@@ -4,7 +4,7 @@ const routes = [
     component: () => import('layouts/MainLayout.vue'),
     children: [
       { path: '', component: () => import('pages/IndexPage.vue') },
-      { path: 'shortest-path', component: () => import('pages/ShortestPathPage2.vue') },
+      { path: 'shortest-path', component: () => import('pages/ShortestPathPage.vue') },
       { path: 'tract-path', component: () => import('pages/TractPath.vue') }
     ]
   },

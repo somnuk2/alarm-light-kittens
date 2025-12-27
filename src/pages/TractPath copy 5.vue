@@ -32,7 +32,7 @@
                     <q-item-label class="text-weight-medium">สถานะการติดตาม</q-item-label>
                     <q-item-label caption v-if="isTracking" class="text-positive">
                       {{ currentLocation ? `${currentLocation.lat.toFixed(5)}, ${currentLocation.lng.toFixed(5)}` :
-                        'กำลังรอสัญญาณ GPS...' }}
+                      'กำลังรอสัญญาณ GPS...' }}
                     </q-item-label>
                     <q-item-label caption v-else>ไม่ได้ติดตามตำแหน่ง</q-item-label>
                   </q-item-section>
@@ -86,14 +86,8 @@
         </q-card-section>
       </q-card>
 
-      <q-card class="full-width relative-position"
-        style="max-width: 900px; border-radius: 16px; overflow: hidden; height: 500px;">
+      <q-card class="full-width" style="max-width: 900px; border-radius: 16px; overflow: hidden; height: 500px;">
         <div id="map-trace" class="full-height"></div>
-
-        <q-inner-loading :showing="isLoading">
-          <q-spinner-gears size="50px" color="primary" />
-          <div class="text-subtitle2 q-mt-sm">กำลังโหลดข้อมูลเส้นทาง...</div>
-        </q-inner-loading>
 
         <div class="absolute-bottom-left q-ma-md bg-white q-pa-sm rounded-borders shadow-2 z-max"
           style="opacity: 0.9; border: 1px solid #ddd;">
@@ -161,15 +155,6 @@ const greenIcon = L.icon({
   shadowSize: [41, 41],
 });
 
-const redIcon = L.icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  shadowSize: [41, 41],
-});
-
 const userIcon = L.divIcon({
   className: 'user-marker-icon',
   html: '<div class="pulse-marker"></div>',
@@ -188,29 +173,21 @@ const autoRecenter = ref(true);
 
 const markerList = ref([]);
 const edgeList = ref([]);
-const isLoading = ref(false);
 
 /* ---------- nodesGraph from markers ONLY ---------- */
 const nodesGraph = computed(() => {
   const nodes = {};
   markerList.value.forEach(m => {
-    const lA = Number(m.lat);
-    const lN = Number(m.lng);
-    if (!m.name || isNaN(lA) || isNaN(lN)) return;
-    nodes[m.name] = { lat: lA, lng: lN, isSafeZone: !!m.isSafeZone };
+    const lat = Number(m.lat);
+    const lng = Number(m.lng);
+    if (!m.name || isNaN(lat) || isNaN(lng)) return;
+    nodes[m.name] = { lat, lng };
   });
   return nodes;
 });
 
 const destinationOptions = computed(() =>
-  Object.keys(nodesGraph.value).sort().map(name => {
-    const isSafe = nodesGraph.value[name]?.isSafeZone;
-    return {
-      label: isSafe ? `🚨 ${name} (จุดปลอดภัย)` : name,
-      value: name,
-      isSafe
-    };
-  })
+  Object.keys(nodesGraph.value).sort().map(name => ({ label: name, value: name }))
 );
 
 /* ---------- Stats ---------- */
@@ -325,7 +302,6 @@ async function loadDataFast() {
   safeLoadingShow('กำลังดึงข้อมูลนำทาง...');
 
   try {
-    isLoading.value = true;
     const [markerResp, edgeResp] = await Promise.all([
       api.get('/api/markers'),
       api.get('/api/edges')
@@ -351,7 +327,6 @@ async function loadDataFast() {
 
     drawBaseMap();
   } finally {
-    isLoading.value = false;
     safeLoadingHide();
   }
 }
@@ -371,11 +346,9 @@ function drawBaseMap() {
   // nodes
   for (const name in nodesGraph.value) {
     const n = nodesGraph.value[name];
-    const isSafe = !!n.isSafeZone;
-    const targetIcon = isSafe ? redIcon : greenIcon;
 
-    const marker = L.marker([n.lat, n.lng], { icon: targetIcon })
-      .bindPopup(`<b>${name}</b>${isSafe ? ' <span style="color:red">(Safe Zone)</span>' : ''}<br>Lat: ${n.lat.toFixed(6)}<br>Lng: ${n.lng.toFixed(6)}`);
+    const marker = L.marker([n.lat, n.lng], { icon: greenIcon })
+      .bindPopup(`<b>${name}</b><br>Lat: ${n.lat.toFixed(6)}<br>Lng: ${n.lng.toFixed(6)}`);
 
     marker.on('mouseover', () => marker.openPopup());
     marker.on('mouseout', () => {
