@@ -99,7 +99,6 @@ app.use(express.json({ limit: '1mb' }));
 // -----------------------------
 // Static SPA (Quasar) - robust
 // -----------------------------
-// พยายามหา dist/spa จากหลายตำแหน่ง (กันกรณี build แล้ว path เปลี่ยน)
 const distCandidates = [
   path.join(__dirname, '../dist/spa'),
   path.join(__dirname, '../../dist/spa'),
@@ -112,20 +111,31 @@ if (distPath) {
   console.log(`✅ Serving static SPA from: ${distPath}`);
   app.use(express.static(distPath));
 } else {
-  console.warn('⚠️  SPA build not found (index.html missing). Root (/) will return API info instead.');
+  console.warn('⚠️  SPA build not found (index.html missing).');
 }
 
 // -----------------------------
 // Routes
 // -----------------------------
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', server: 'running', time: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    server: 'running',
+    time: new Date().toISOString(),
+    distPath: distPath || 'NOT_FOUND'
+  });
 });
 
-// ให้ / ตอบเสมอ (ไม่เจอ dist ก็ไม่ขึ้น Cannot GET /)
+// Root handler
 app.get('/', (req, res) => {
-  if (distPath) return res.sendFile(path.join(distPath, 'index.html'));
-  res.json({ ok: true, message: 'Backend is running. Try /api/health' });
+  if (distPath) {
+    return res.sendFile(path.join(distPath, 'index.html'));
+  }
+  res.json({
+    ok: true,
+    message: 'Backend is running, but SPA files were not found.',
+    hint: 'Check build logs and dist/spa folder.'
+  });
 });
 
 // -----------------------------
