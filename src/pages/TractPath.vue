@@ -66,7 +66,8 @@
             <!-- Voice Guidance Toggle -->
             <div class="row items-center q-mt-sm justify-end">
               <div class="col-auto">
-                <q-toggle v-model="voiceEnabled" color="secondary" icon="volume_up" label="เสียงนำทาง" />
+                <q-toggle v-model="voiceEnabled" color="secondary" icon="volume_up" label="เสียงนำทาง"
+                  @update:model-value="onVoiceToggle" />
               </div>
             </div>
 
@@ -493,7 +494,12 @@ function drawBaseMap() {
 }
 
 /* ---------- Tracking ---------- */
-function toggleTracking() { isTracking.value ? stopTracking() : startTracking(); }
+function toggleTracking() {
+  if (!isTracking.value) {
+    primeVoice();
+  }
+  isTracking.value ? stopTracking() : startTracking();
+}
 
 function startTracking() {
   if (!navigator.geolocation) {
@@ -678,16 +684,44 @@ function generateInstructions(path, distToStart) {
   }
 }
 
+function onVoiceToggle(val) {
+  if (val) {
+    primeVoice();
+    speakInstruction('ระบบนำทางด้วยเสียงเปิดใช้งานแล้ว');
+  }
+}
+
+/**
+ * Browsers (especially mobile Safari/Chrome) block speech until a user gesture.
+ * This "primes" the engine with a silent utterance.
+ */
+function primeVoice() {
+  if (!window.speechSynthesis) return;
+  const utterance = new SpeechSynthesisUtterance('');
+  utterance.volume = 0;
+  window.speechSynthesis.speak(utterance);
+}
+
 function speakInstruction(text) {
   if (!voiceEnabled.value) return;
   if (!window.speechSynthesis) return;
 
-  // Cancel previous speech
+  // Cancel previous speech to stay current
   window.speechSynthesis.cancel();
 
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'th-TH';
-  utterance.rate = 0.9;
+  utterance.rate = 1.0;
+  utterance.pitch = 1.0;
+  utterance.volume = 1.0;
+
+  // Try to find a Thai voice explicitly (improves reliability on some mobiles)
+  const voices = window.speechSynthesis.getVoices();
+  const thaiVoice = voices.find(v => v.lang.includes('th') || v.lang.includes('TH'));
+  if (thaiVoice) {
+    utterance.voice = thaiVoice;
+  }
+
   window.speechSynthesis.speak(utterance);
 }
 
