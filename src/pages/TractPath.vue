@@ -156,7 +156,123 @@ import { useQuasar } from 'quasar';
 import { api } from 'boot/axios';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { SHARED_LOCATIONS, SHARED_EDGES } from '../constants/locations';
+import { SHARED_LOCATIONS, SHARED_EDGES, SCHOOL_POLY, GATES } from '../constants/locations';
+import { INDOOR_CENTERLINES } from '../constants/indoorCenterlines';
+
+/* ---------- Point in Polygon Helper ---------- */
+
+function pointInPolygon(lat, lng, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1];
+    const xj = poly[j][0], yj = poly[j][1];
+    const intersect = ((yi > lng) !== (yj > lng)) &&
+      (lat < (xj - xi) * (lng - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/* ---------- Centerline Helpers ---------- */
+const INDOOR_SNAP_MAX_M = 10;
+
+function llToXY(lat, lng, refLat) {
+  const R = 6378137;
+  const rad = Math.PI / 180;
+  const x = lng * rad * R * Math.cos(refLat * rad);
+  const y = lat * rad * R;
+  return { x, y };
+}
+
+function closestPointOnSegment(A, B, P, refLat) {
+  const a = llToXY(A[0], A[1], refLat);
+  const b = llToXY(B[0], B[1], refLat);
+  const p = llToXY(P[0], P[1], refLat);
+
+  const abx = b.x - a.x, aby = b.y - a.y;
+  const apx = p.x - a.x, apy = p.y - a.y;
+
+  const ab2 = abx * abx + aby * aby || 1e-12;
+  let t = (apx * abx + apy * aby) / ab2;
+  t = Math.max(0, Math.min(1, t));
+
+  const x = a.x + t * abx;
+  const y = a.y + t * aby;
+
+  const rad = Math.PI / 180;
+  const lat = (y / 6378137) / rad;
+  const lng = (x / (6378137 * Math.cos(refLat * rad))) / rad;
+
+  const dx = p.x - x, dy = p.y - y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  return { point: [lat, lng], t, distM: dist };
+}
+
+function closestPointOnPolyline(poly, P) {
+  const refLat = P[0];
+  let best = null;
+
+  for (let i = 0; i < poly.length - 1; i++) {
+    const hit = closestPointOnSegment(poly[i], poly[i + 1], P, refLat);
+    if (!best || hit.distM < best.distM) best = { ...hit, segIndex: i };
+  }
+  return best;
+}
+
+function slicePolyline(poly, projA, projB) {
+  let a = projA, b = projB;
+  const aPos = a.segIndex + a.t;
+  const bPos = b.segIndex + b.t;
+  const forward = aPos <= bPos;
+
+  const start = forward ? a : b;
+  const end = forward ? b : a;
+
+  const out = [];
+  out.push(start.point);
+  for (let i = start.segIndex + 1; i <= end.segIndex; i++) {
+    out.push(poly[i]);
+  }
+  out.push(end.point);
+
+  return forward ? out : out.slice().reverse();
+}
+
+function buildIndoorEdgeShape(nameA, nameB) {
+  const A = nodesGraph.value[nameA];
+  const B = nodesGraph.value[nameB];
+  if (!A || !B) return null;
+
+  const pA = [A.lat, A.lng];
+  const pB = [B.lat, B.lng];
+
+  let best = null;
+  for (const cl of INDOOR_CENTERLINES) {
+    const poly = cl.points;
+    if (!Array.isArray(poly) || poly.length < 2) continue;
+
+    const projA = closestPointOnPolyline(poly, pA);
+    const projB = closestPointOnPolyline(poly, pB);
+    if (!projA || !projB) continue;
+
+    if (projA.distM <= INDOOR_SNAP_MAX_M && projB.distM <= INDOOR_SNAP_MAX_M) {
+      const score = projA.distM + projB.distM;
+      if (!best || score < best.score) best = { score, poly, projA, projB };
+    }
+  }
+
+  if (!best) return [[A.lat, A.lng], [B.lat, B.lng]];
+  return slicePolyline(best.poly, best.projA, best.projB);
+}
+
+function getEdgeBetween(a, b) {
+  return edgeList.value.find(e =>
+    (e.nameA === a && e.nameB === b) || (e.nameA === b && e.nameB === a)
+  );
+}
+
+
 
 const $q = useQuasar();
 
@@ -237,6 +353,8 @@ const voiceEnabled = ref(true);
 const instructions = ref([]);
 const currentStepIndex = ref(0);
 let lastSpokenStep = -1;
+const stepPoints = ref([]); // For precise turn tracking
+
 
 /* ---------- nodesGraph from markers ONLY ---------- */
 const nodesGraph = computed(() => {
@@ -264,6 +382,8 @@ const destinationOptions = computed(() =>
 /* ---------- Stats ---------- */
 const totalStats = reactive({ distance: 0, time: 0 });       // time minutes
 const remainingStats = reactive({ distance: 0, time: 0 });
+let currentRoutePolyline = []; // Storage for current full route
+
 
 /* ---------- Map + Layers ---------- */
 const map = ref(null);
@@ -276,10 +396,12 @@ const layers = {
 };
 
 /* ---------- Reusable Leaflet Objects (speed) ---------- */
-let userMarker = null;
-let historyLine = null;
-let userToStartLine = null;
-let routeLine = null;
+function getDistFromPolyline(p, polyline) {
+  if (!polyline || polyline.length < 2) return Infinity;
+  const hit = closestPointOnPolyline(polyline, [p.lat, p.lng]);
+  return hit ? hit.distM : Infinity;
+}
+
 
 const userPathHistory = ref([]);
 const MAX_HISTORY_POINTS = 250;
@@ -389,11 +511,27 @@ async function loadDataFast() {
     ]);
 
     markerList.value = markerResp.data?.length ? markerResp.data : [...SHARED_LOCATIONS];
+
+    // Ensure Gates are in markerList so Dijkstra can find them by name
+    GATES.forEach(gate => {
+      if (!markerList.value.find(m => m.name === gate.name)) {
+        markerList.value.push({ ...gate, isSafeZone: false });
+      }
+    });
+
     edgeList.value = edgeResp.data?.length ? edgeResp.data : fallbackEdgesFromConstants();
+
 
     edgeList.value = edgeList.value.filter(e => nodesGraph.value[e.nameA] && nodesGraph.value[e.nameB]);
 
+    // Apply automatic shapes from centerlines
+    edgeList.value = edgeList.value.map(e => {
+      const shape = buildIndoorEdgeShape(e.nameA, e.nameB);
+      return { ...e, shape: e.shape || shape };
+    });
+
     drawBaseMap();
+
     saveCache();
 
     if (!selectedDestination.value && destinationOptions.value.length > 0) {
@@ -457,7 +595,11 @@ function drawBaseMap() {
     const B = nodesGraph.value[e.nameB];
     if (!A || !B) return;
 
-    const line = L.polyline([[A.lat, A.lng], [B.lat, B.lng]], {
+    const pts = Array.isArray(e.shape) && e.shape.length >= 2
+      ? e.shape
+      : [[A.lat, A.lng], [B.lat, B.lng]];
+
+    const line = L.polyline(pts, {
       color: '#3388ff',
       weight: 3,
       opacity: 0.6
@@ -485,12 +627,15 @@ function drawBaseMap() {
 
     layers.baseEdges.addLayer(line);
 
-    bounds.extend([A.lat, A.lng]);
-    bounds.extend([B.lat, B.lng]);
+    pts.forEach(p => bounds.extend(p));
     has = true;
+
   });
 
   if (has) map.value.fitBounds(bounds, { padding: [40, 40] });
+
+  // Draw school boundary for visual reference
+  L.polygon(SCHOOL_POLY, { color: '#22c55e', weight: 2, fillOpacity: 0.1, dashArray: '5, 5' }).addTo(map.value);
 }
 
 /* ---------- Tracking ---------- */
@@ -562,11 +707,79 @@ function updateUserLocation(lat, lng) {
     map.value.flyTo([lat, lng], getResponsiveZoom(), { animate: true, duration: 0.5 });
   }
 
-  if (selectedDestination.value) {
+  if (selectedDestination.value && map.value) {
     clearTimeout(navThrottleTimer);
-    navThrottleTimer = setTimeout(() => updateNavigation(), 900);
+    navThrottleTimer = setTimeout(() => handleNavigationTick(), 1000);
   }
 }
+
+function handleNavigationTick() {
+  if (!selectedDestination.value || !currentLocation.value) return;
+
+  const userLL = [currentLocation.value.lat, currentLocation.value.lng];
+  const isIndoor = pointInPolygon(userLL[0], userLL[1], SCHOOL_POLY);
+  const offRouteThreshold = isIndoor ? 25 : 50;
+
+  const distOff = getDistFromPolyline(currentLocation.value, currentRoutePolyline);
+
+  if (currentRoutePolyline.length === 0 || distOff > offRouteThreshold) {
+    // Way off route or no route -> Full Reroute
+    updateNavigation();
+  } else {
+    // Still on route -> Just update step tracking and stats
+    updateNavigationStatusOnly();
+  }
+}
+
+function updateNavigationStatusOnly() {
+  if (!currentLocation.value || currentRoutePolyline.length < 2) return;
+
+  const userLL = L.latLng(currentLocation.value.lat, currentLocation.value.lng);
+
+  // Calculate remaining distance from user to end of polyline
+  const hit = closestPointOnPolyline(currentRoutePolyline, [currentLocation.value.lat, currentLocation.value.lng]);
+  let remainingD = hit.distM; // dist to nearest point on polyline
+
+  // Add distances of segments after the hit point
+  for (let i = hit.segIndex + 1; i < currentRoutePolyline.length - 1; i++) {
+    const p1 = currentRoutePolyline[i];
+    const p2 = currentRoutePolyline[i+1];
+    remainingD += L.latLng(p1[0], p1[1]).distanceTo(L.latLng(p2[0], p2[1]));
+  }
+
+  remainingStats.distance = Math.round(remainingD);
+  remainingStats.time = Math.round(remainingD / 80);
+
+  // Still need to call the tracking part of generateInstructions logic
+  trackStepProgress(userLL);
+}
+
+function trackStepProgress(userLL) {
+  if (stepPoints.value.length === 0) return;
+
+  let bestStep = currentStepIndex.value;
+  const threshold = pointInPolygon(userLL.lat, userLL.lng, SCHOOL_POLY) ? 10 : 25;
+
+  for (let i = currentStepIndex.value; i < stepPoints.value.length; i++) {
+    const pt = stepPoints.value[i];
+    if (!pt) continue;
+    const d = userLL.distanceTo(L.latLng(pt[0], pt[1]));
+    if (d < threshold) {
+      bestStep = i + 1;
+    }
+  }
+
+  if (bestStep > currentStepIndex.value) {
+    currentStepIndex.value = Math.min(bestStep, instructions.value.length - 1);
+  }
+
+  if (voiceEnabled.value && lastSpokenStep !== currentStepIndex.value) {
+    const textToSpeak = instructions.value[currentStepIndex.value];
+    if (textToSpeak) speakInstruction(textToSpeak);
+    lastSpokenStep = currentStepIndex.value;
+  }
+}
+
 
 function recenterMap() {
   if (currentLocation.value && map.value) {
@@ -575,7 +788,6 @@ function recenterMap() {
   }
 }
 
-/* ---------- Navigation ---------- */
 function onDestinationChange() {
   totalStats.distance = 0;
   totalStats.time = 0;
@@ -588,47 +800,168 @@ function onDestinationChange() {
   currentStepIndex.value = 0;
   lastSpokenStep = -1;
 
-  if (selectedDestination.value) updateNavigation();
+  if (selectedDestination.value) {
+    currentRoutePolyline = []; // Reset to force reroute
+    updateNavigation();
+  }
 }
 
-function updateNavigation() {
-  if (!selectedDestination.value) return;
 
-  let startNode = null;
-  let distToStart = 0;
+async function updateNavigation() {
+  if (!selectedDestination.value || !currentLocation.value) return;
 
-  if (currentLocation.value) {
-    const nearest = findNearestNode(currentLocation.value.lat, currentLocation.value.lng);
-    startNode = nearest.node;
-    distToStart = nearest.distance;
-  } else {
-    startNode = Object.keys(nodesGraph.value).sort()[0] || null;
-    distToStart = 0;
+  isLoading.value = true;
+  try {
+    const res = await buildRouteHybrid(currentLocation.value, selectedDestination.value);
+    if (!res) {
+      $q.notify?.({ type: 'warning', message: 'ไม่พบเส้นทางไปยังจุดหมาย' });
+      return;
+    }
+
+    drawRoutePolyline(res.polyline, currentLocation.value, res.polyline[0]);
+    currentRoutePolyline = res.polyline;
+
+    totalStats.distance = Math.round(res.totalDistance);
+
+    totalStats.time = Math.round(res.totalTime);
+    remainingStats.distance = Math.round(res.totalDistance);
+    remainingStats.time = Math.round(res.totalTime);
+
+    instructions.value = res.instructions || [];
+    stepPoints.value = res.stepPoints || [];
+    currentStepIndex.value = 0;
+    lastSpokenStep = -1;
+
+    // Initial voice instruction
+    if (voiceEnabled.value && instructions.value.length > 0) {
+      speakInstruction(instructions.value[0]);
+      lastSpokenStep = 0;
+    }
+  } catch (err) {
+    console.error(err);
+    $q.notify?.({ type: 'negative', message: 'เกิดข้อผิดพลาดในการคำนวณเส้นทาง' });
+  } finally {
+    isLoading.value = false;
   }
-
-  if (!startNode) return;
-
-  const res = dijkstra(startNode, selectedDestination.value);
-  if (!res) {
-    $q.notify?.({ type: 'warning', message: 'ไม่พบเส้นทางไปยังจุดหมาย' });
-    return;
-  }
-
-  drawRoute(res.path, currentLocation.value);
-
-  const totalDistance = distToStart + res.dist;
-  const totalTimeMin = totalDistance / 80;
-
-  if (totalStats.distance === 0 || !isTracking.value) {
-    totalStats.distance = Math.round(totalDistance);
-    totalStats.time = Math.round(totalTimeMin);
-  }
-
-  remainingStats.distance = Math.round(totalDistance);
-  remainingStats.time = Math.round(totalTimeMin);
-
-  generateInstructions(res.path, distToStart);
 }
+
+async function buildRouteHybrid(userLL, destination) {
+  const userInside = pointInPolygon(userLL.lat, userLL.lng, SCHOOL_POLY);
+  const destNode = nodesGraph.value[destination];
+  if (!destNode) return null;
+
+  // Determine if destination is indoor/outdoor based on its position in SCHOOL_POLY
+  const destIsIndoor = pointInPolygon(destNode.lat, destNode.lng, SCHOOL_POLY);
+  const destInfo = { lat: destNode.lat, lng: destNode.lng, isIndoor: destIsIndoor };
+
+  // 1) indoor->indoor
+  if (userInside && destInfo.isIndoor) {
+    return buildIndoorRoute(userLL, destination);
+  }
+
+  // 2) outdoor->outdoor
+  if (!userInside && !destInfo.isIndoor) {
+    return await buildOutdoorRoute(userLL, destInfo);
+  }
+
+
+  // 3) in->out or out->in : stitch via best gate
+  let best = null;
+  for (const gate of GATES) {
+    const gateLL = { lat: gate.lat, lng: gate.lng };
+
+    const indoorPart = userInside
+      ? buildIndoorRoute(userLL, gate.name)       // user -> gate
+      : buildIndoorRoute(gateLL, destination);    // gate -> indoor dest
+
+    const outdoorPart = userInside
+      ? await buildOutdoorRoute(gateLL, destInfo) // gate -> outdoor dest
+      : await buildOutdoorRoute(userLL, gateLL);  // user -> gate
+
+    if (!indoorPart || !outdoorPart) continue;
+
+    const merged = mergeRoutes(userInside ? indoorPart : outdoorPart, userInside ? outdoorPart : indoorPart);
+    if (!best || merged.totalTime < best.totalTime) best = merged;
+  }
+
+  return best;
+}
+
+function buildIndoorRoute(fromLL, toName) {
+  // Find nearest node to start if fromLL is coordinates
+  const nearest = findNearestNode(fromLL.lat, fromLL.lng);
+  const startNode = nearest.node;
+  const distToStart = nearest.distance;
+
+  const res = dijkstra(startNode, toName);
+  if (!res) return null;
+
+  const polyline = updateNavigationPolyline(res.path);
+  // Add current location as connector point if needed
+  if (distToStart > 5) {
+    polyline.unshift([fromLL.lat, fromLL.lng]);
+  }
+
+  const steps = [];
+  if (distToStart > 10) {
+    steps.push(`เดินไปที่จุดเริ่มต้น: ${res.path[0]}`);
+  }
+  for (let i = 0; i < res.path.length - 1; i++) {
+    steps.push(`จาก ${res.path[i]} เดินต่อไปยัง ${res.path[i + 1]}`);
+  }
+
+  return {
+    polyline,
+    instructions: steps,
+    stepPoints: polyline,
+    totalDistance: distToStart + res.dist,
+    totalTime: (distToStart + res.dist) / 80 // minutes
+  };
+}
+
+
+async function buildOutdoorRoute(fromLL, toLL) {
+  if (!fromLL || !toLL) return null;
+  try {
+    const { data } = await api.post('/api/route/osrm', {
+      profile: 'foot',
+      from: fromLL,
+      to: toLL
+    });
+    return data;
+  } catch (err) {
+    console.error('Outdoor route failed:', err);
+    return null;
+  }
+}
+
+function mergeRoutes(a, b) {
+  const polyline = [];
+  const pushSeg = (seg) => {
+    if (!seg?.length) return;
+    if (!polyline.length) { polyline.push(...seg); return; }
+    const last = polyline[polyline.length - 1];
+    const first = seg[0];
+    // Avoid duplicate point at stitch
+    if (Math.abs(last[0] - first[0]) < 0.00001 && Math.abs(last[1] - first[1]) < 0.00001) {
+      polyline.push(...seg.slice(1));
+    } else {
+      polyline.push(...seg);
+    }
+  };
+
+  pushSeg(a.polyline);
+  pushSeg(b.polyline);
+
+  return {
+    polyline,
+    instructions: [...(a.instructions || []), 'เดินออกไปนอกเขต', ...(b.instructions || [])],
+    stepPoints: [...(a.stepPoints || []), ...(b.stepPoints || [])],
+    totalDistance: (a.totalDistance || 0) + (b.totalDistance || 0),
+    totalTime: (a.totalTime || 0) + (b.totalTime || 0),
+  };
+}
+
 
 function generateInstructions(path, distToStart) {
   if (!path || path.length === 0) {
@@ -656,33 +989,10 @@ function generateInstructions(path, distToStart) {
 
   instructions.value = steps;
 
-  // Real-time tracking of current step
-  if (currentLocation.value) {
-    const userLL = L.latLng(currentLocation.value.lat, currentLocation.value.lng);
-    let bestStep = 0;
-
-    // Find the furthest waypoint we are "at" or the next one we are heading to
-    for (let i = 0; i < waypoints.length; i++) {
-      if (!waypoints[i]) continue;
-      const d = userLL.distanceTo(waypoints[i]);
-      if (d < 10) { // If within 10 meters of a node
-        bestStep = i + 1;
-      }
-    }
-
-    // Ensure we don't go backwards in instruction tracking
-    if (bestStep > currentStepIndex.value) {
-      currentStepIndex.value = Math.min(bestStep, steps.length - 1);
-    }
-  }
-
-  // Speak if step changed
-  if (voiceEnabled.value && lastSpokenStep !== currentStepIndex.value) {
-    const textToSpeak = steps[currentStepIndex.value];
-    if (textToSpeak) speakInstruction(textToSpeak);
-    lastSpokenStep = currentStepIndex.value;
-  }
+  // Speak if step changed (handled in trackStepProgress now)
 }
+
+
 
 function onVoiceToggle(val) {
   if (val) {
@@ -775,33 +1085,62 @@ function dijkstra(start, end) {
   return { path, dist: dist[end] };
 }
 
-function drawRoute(path, userLoc) {
-  if (!path?.length) return;
+function updateNavigationPolyline(path) {
+  const latlngs = [];
 
-  if (userLoc && nodesGraph.value[path[0]]) {
-    const startNode = nodesGraph.value[path[0]];
-    const dashed = [[userLoc.lat, userLoc.lng], [startNode.lat, startNode.lng]];
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i], b = path[i + 1];
+    const e = getEdgeBetween(a, b);
+    const A = nodesGraph.value[a], B = nodesGraph.value[b];
+    if (!A || !B) continue;
 
-    if (!userToStartLine) {
-      userToStartLine = L.polyline(dashed, { color: '#ef4444', weight: 4, dashArray: '10, 10', opacity: 0.7 }).addTo(layers.route);
+    let seg = (e?.shape && e.shape.length >= 2)
+      ? e.shape
+      : [[A.lat, A.lng], [B.lat, B.lng]];
+
+    // Make sure segment direction is a -> b
+    const first = seg[0], last = seg[seg.length - 1];
+    const userLL = L.latLng(A.lat, A.lng);
+    const dFirstToA = userLL.distanceTo(L.latLng(first[0], first[1]));
+    const dLastToA  = userLL.distanceTo(L.latLng(last[0], last[1]));
+    if (dLastToA < dFirstToA) seg = [...seg].reverse();
+
+    // Stitch segments together avoiding duplicate points
+    if (latlngs.length) {
+      const prev = latlngs[latlngs.length - 1];
+      const cur0 = seg[0];
+      if (Math.abs(prev[0] - cur0[0]) < 0.00001 && Math.abs(prev[1] - cur0[1]) < 0.00001) {
+        latlngs.push(...seg.slice(1));
+      } else {
+        latlngs.push(...seg);
+      }
     } else {
-      userToStartLine.setLatLngs(dashed);
+      latlngs.push(...seg);
     }
   }
 
-  const latlngs = path
-    .map(name => nodesGraph.value[name])
-    .filter(Boolean)
-    .map(n => [n.lat, n.lng]);
+  return latlngs;
+}
 
-  if (latlngs.length > 1) {
-    if (!routeLine) {
-      routeLine = L.polyline(latlngs, { color: '#ef4444', weight: 6, opacity: 0.9 }).addTo(layers.route);
-    } else {
-      routeLine.setLatLngs(latlngs);
-    }
+function drawRoutePolyline(latlngs, userLoc, startLL) {
+  if (!latlngs?.length) return;
+
+  // เส้นประจาก user ไปจุดเริ่มต้นของ polyline
+  if (userLoc && startLL) {
+    const dashed = [[userLoc.lat, userLoc.lng], [startLL[0], startLL[1]]];
+    if (!userToStartLine) {
+      userToStartLine = L.polyline(dashed, { color: '#ef4444', weight: 4, dashArray: '10, 10', opacity: 0.7 })
+        .addTo(layers.route);
+    } else userToStartLine.setLatLngs(dashed);
+  }
+
+  if (!routeLine) {
+    routeLine = L.polyline(latlngs, { color: '#ef4444', weight: 6, opacity: 0.9 }).addTo(layers.route);
+  } else {
+    routeLine.setLatLngs(latlngs);
   }
 }
+
 </script>
 
 <style scoped>
