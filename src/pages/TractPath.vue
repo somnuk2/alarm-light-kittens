@@ -144,6 +144,14 @@
               <div class="row items-center no-wrap"><q-badge rounded color="red" class="q-mr-xs" /> เส้นทาง</div>
             </div>
           </div>
+
+          <!-- Re-center Button (appears when autoRecenter is off during tracking) -->
+          <transition appear enter-active-class="animated fadeIn" leave-active-class="animated fadeOut">
+            <q-btn v-if="isTracking && !autoRecenter" position="bottom-right" fab color="primary" icon="my_location"
+              class="absolute-bottom-right q-ma-md z-max" @click="recenterMap">
+              <q-tooltip>กลับไปที่ตำแหน่งปัจจุบัน</q-tooltip>
+            </q-btn>
+          </transition>
         </q-card>
       </div>
     </div>
@@ -940,7 +948,7 @@ async function buildOutdoorRoute(fromLL, toLL) {
   if (!fromLL || !toLL) return null;
   try {
     const { data } = await api.post('/api/route/osrm', {
-      profile: 'foot',
+      profile: 'driving',
       from: fromLL,
       to: toLL
     });
