@@ -310,6 +310,90 @@ app.delete('/api/edges/:id', asyncHandler(async (req, res) => {
 }));
 
 // -----------------------------
+// Outdoor Routing (OSRM Proxy with Caching)
+// -----------------------------
+const routeCache = new Map();
+const CACHE_TTL_MS = 60 * 1000; // 1 minute
+
+app.post('/api/route/osrm', asyncHandler(async (req, res) => {
+  const { profile = 'foot', from, to } = req.body ?? {};
+
+  if (!from || !to) {
+    return res.status(400).json({ error: 'Missing from/to coordinates' });
+  }
+
+  // Create a cache key based on rounded coordinates (approx 1m precision)
+  const cacheKey = `${profile}:${from.lat.toFixed(5)},${from.lng.toFixed(5)}:${to.lat.toFixed(5)},${to.lng.toFixed(5)}`;
+
+  if (routeCache.has(cacheKey)) {
+    const cached = routeCache.get(cacheKey);
+    if (Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      return res.json(cached.data);
+    }
+    routeCache.delete(cacheKey);
+  }
+
+  const url = `https://router.project-osrm.org/route/v1/${profile}/` +
+    `${from.lng},${from.lat};${to.lng},${to.lat}` +
+    `?overview=full&geometries=geojson&steps=true`;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    const data = await response.json();
+
+    const route = data?.routes?.[0];
+    if (!route) {
+      return res.status(404).json({ error: 'No route found' });
+    }
+
+    const polyline = (route.geometry.coordinates || []).map(([lng, lat]) => [lat, lng]);
+    const legs = route.legs || [];
+    const instructions = [];
+    const stepPoints = [];
+    for (const leg of legs) {
+      for (const st of (leg.steps || [])) {
+        const name = st.name ? `บน ${st.name}` : '';
+        const man = st.maneuver?.type || 'เดินต่อไป';
+        instructions.push(`${man} ${name}`.trim());
+        const loc = st.maneuver?.location;
+        if (loc) stepPoints.push([loc[1], loc[0]]);
+      }
+    }
+
+    const result = {
+      polyline,
+      instructions,
+      stepPoints,
+      totalDistance: route.distance || 0,
+      totalTime: (route.duration || 0) / 60,
+    };
+
+    // Save to cache
+    routeCache.set(cacheKey, { data: result, timestamp: Date.now() });
+
+    // Simple cache cleanup (keep it small)
+    if (routeCache.size > 100) {
+      const first = routeCache.keys().next().value;
+      routeCache.delete(first);
+    }
+
+    res.json(result);
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      return res.status(504).json({ error: 'OSRM request timed out' });
+    }
+    console.error('OSRM fetch error:', err);
+    res.status(502).json({ error: 'Failed to fetch from OSRM' });
+  }
+}));
+
+
+// -----------------------------
 // SPA Catch-all (ต้องอยู่ท้ายสุด)
 // -----------------------------
 app.get('*', (req, res) => {
