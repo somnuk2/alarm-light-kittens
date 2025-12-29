@@ -396,6 +396,11 @@ const layers = {
 };
 
 /* ---------- Reusable Leaflet Objects (speed) ---------- */
+let userMarker = null;
+let historyLine = null;
+let userToStartLine = null;
+let routeLine = null;
+
 function getDistFromPolyline(p, polyline) {
   if (!polyline || polyline.length < 2) return Infinity;
   const hit = closestPointOnPolyline(polyline, [p.lat, p.lng]);
@@ -743,7 +748,7 @@ function updateNavigationStatusOnly() {
   // Add distances of segments after the hit point
   for (let i = hit.segIndex + 1; i < currentRoutePolyline.length - 1; i++) {
     const p1 = currentRoutePolyline[i];
-    const p2 = currentRoutePolyline[i+1];
+    const p2 = currentRoutePolyline[i + 1];
     remainingD += L.latLng(p1[0], p1[1]).distanceTo(L.latLng(p2[0], p2[1]));
   }
 
@@ -1102,7 +1107,7 @@ function updateNavigationPolyline(path) {
     const first = seg[0], last = seg[seg.length - 1];
     const userLL = L.latLng(A.lat, A.lng);
     const dFirstToA = userLL.distanceTo(L.latLng(first[0], first[1]));
-    const dLastToA  = userLL.distanceTo(L.latLng(last[0], last[1]));
+    const dLastToA = userLL.distanceTo(L.latLng(last[0], last[1]));
     if (dLastToA < dFirstToA) seg = [...seg].reverse();
 
     // Stitch segments together avoiding duplicate points

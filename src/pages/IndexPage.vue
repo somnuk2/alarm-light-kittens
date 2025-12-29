@@ -1,5 +1,5 @@
 <template>
-  <q-page class="q-pa-md bg-grey-2">
+  <q-page :class="pagePadClass + ' bg-grey-2'">
     <div class="row justify-center">
       <div class="col-12 col-xl-10">
         <h1 class="text-h4 text-center text-weight-bold q-mb-xs text-primary">
@@ -10,7 +10,7 @@
         </p>
 
         <div class="column q-gutter-lg">
-          <!-- MAP -->
+          <!-- MAP (อยู่บนสุดเสมอ) -->
           <q-card class="my-card map-card">
             <q-card-section class="q-pb-none">
               <div class="text-h6 text-primary flex items-center">
@@ -25,7 +25,10 @@
             <q-separator />
 
             <q-card-section class="map-body relative-position">
-              <div id="map" class="map-container rounded-borders shadow-1"></div>
+              <!-- ✅ เฝ้าดูขนาด container จริง -->
+              <q-resize-observer @resize="onMapContainerResize" />
+
+              <div ref="mapEl" class="map-container rounded-borders shadow-1" :style="{ height: mapHeight }"></div>
 
               <q-inner-loading :showing="isLoadingMarkers">
                 <q-spinner-gears size="50px" color="primary" />
@@ -34,8 +37,8 @@
             </q-card-section>
           </q-card>
 
-          <!-- FORM -->
-          <q-card class="my-card q-mb-md">
+          <!-- FORM + TABLE -->
+          <q-card class="my-card">
             <q-card-section>
               <div class="text-h6 text-primary flex items-center q-mb-md">
                 <q-badge color="primary" class="q-mr-sm text-subtitle2">2</q-badge>
@@ -43,24 +46,25 @@
               </div>
 
               <div class="q-gutter-y-md">
-                <q-input v-model="placeName" label="ชื่อสถานที่ / อาคาร" placeholder="เช่น อาคารที่ 1" outlined dense
-                  bg-color="white" :rules="[val => !!String(val || '').trim() || 'กรุณากรอกชื่อสถานที่']">
+                <q-input v-model="placeName" label="ชื่อสถานที่ / อาคาร" placeholder="เช่น อาคารที่ 1" outlined
+                  :dense="isMobile" bg-color="white"
+                  :rules="[val => !!String(val || '').trim() || 'กรุณากรอกชื่อสถานที่']">
                   <template #prepend><q-icon name="place" /></template>
                 </q-input>
 
                 <div class="row q-col-gutter-sm">
-                  <div class="col-6">
-                    <q-input v-model.number="lat" type="number" label="Latitude" placeholder="18.xxxx" outlined dense
-                      bg-color="white" step="0.000001" />
+                  <div class="col-12 col-sm-6">
+                    <q-input v-model.number="lat" type="number" label="Latitude" placeholder="18.xxxx" outlined
+                      :dense="isMobile" bg-color="white" step="0.000001" />
                   </div>
-                  <div class="col-6">
-                    <q-input v-model.number="lng" type="number" label="Longitude" placeholder="99.xxxx" outlined dense
-                      bg-color="white" step="0.000001" />
+                  <div class="col-12 col-sm-6">
+                    <q-input v-model.number="lng" type="number" label="Longitude" placeholder="99.xxxx" outlined
+                      :dense="isMobile" bg-color="white" step="0.000001" />
                   </div>
                 </div>
 
                 <q-input v-model="address" label="ค้นหาจากชื่อที่อยู่ (Geocoding)" placeholder="เช่น โรงเรียนวารี"
-                  outlined dense bg-color="white" @keyup.enter="handleGeocode"
+                  outlined :dense="isMobile" bg-color="white" @keyup.enter="handleGeocode"
                   hint="ใช้บริการ Nominatim (OpenStreetMap)">
                   <template #append>
                     <q-btn flat round color="primary" icon="search" @click="handleGeocode" :loading="isGeocoding" />
@@ -68,16 +72,25 @@
                 </q-input>
 
                 <div class="row items-center q-px-sm border-grey-1 rounded-borders bg-white q-py-xs">
-                  <q-checkbox v-model="isSafeZone" label="สถานะ Safe Zone (จุดปลอดภัย)" color="positive" keep-color />
+                  <q-checkbox v-model="isSafeZone" label="สถานะ Safe Zone (จุดปลอดภัย)" color="positive" keep-color
+                    :dense="isMobile" />
                   <q-icon name="emergency" :color="isSafeZone ? 'red' : 'grey-4'" size="22px" class="q-ml-sm" />
                 </div>
 
-                <div class="row q-gutter-sm justify-center q-mt-md">
-                  <q-btn unelevated color="secondary" text-color="white" icon="my_location" label="ค้นหาพิกัด"
-                    @click="handleGeocode" :loading="isGeocoding" class="col-auto" />
-                  <q-btn unelevated color="positive" icon="add_location_alt" label="เพิ่ม/อัปเดต"
-                    @click="handleAddMarker" class="col-auto" />
-                  <q-btn outline color="grey-7" label="ล้างค่า" @click="resetForm" class="col-auto" />
+                <!-- ✅ ปุ่มปรับตามอุปกรณ์: มือถือเต็มกว้าง, จอใหญ่เรียงกัน -->
+                <div class="row q-col-gutter-sm q-mt-md">
+                  <div class="col-12 col-sm-auto">
+                    <q-btn unelevated color="secondary" text-color="white" icon="my_location" label="ค้นหาพิกัด"
+                      @click="handleGeocode" :loading="isGeocoding" :class="isMobile ? 'full-width' : ''" />
+                  </div>
+                  <div class="col-12 col-sm-auto">
+                    <q-btn unelevated color="positive" icon="add_location_alt" label="เพิ่ม/อัปเดต"
+                      @click="handleAddMarker" :class="isMobile ? 'full-width' : ''" />
+                  </div>
+                  <div class="col-12 col-sm-auto">
+                    <q-btn outline color="grey-7" label="ล้างค่า" @click="resetForm"
+                      :class="isMobile ? 'full-width' : ''" />
+                  </div>
                 </div>
               </div>
             </q-card-section>
@@ -96,9 +109,14 @@
                 </q-btn>
               </div>
 
-              <q-table :rows="markerList" :columns="markerTableColumns" row-key="name" flat bordered dense
-                :pagination="{ rowsPerPage: 10 }" class="bg-white">
-                <template #body-cell-isSafeZone="props">
+              <!-- ✅ ตาราง responsive:
+                   - Mobile: grid card (อ่านง่าย)
+                   - Desktop: table ปกติ -->
+              <q-table :rows="markerList" :columns="markerTableColumns" :visible-columns="visibleColumns" row-key="name"
+                flat bordered :dense="isMobile" :grid="isMobile" :hide-header="isMobile"
+                :pagination="{ rowsPerPage: isMobile ? 6 : 10 }" class="bg-white">
+                <!-- Desktop: safe chip -->
+                <template v-if="!isMobile" #body-cell-isSafeZone="props">
                   <q-td :props="props" class="text-center">
                     <q-chip v-if="props.value" color="negative" text-color="white" size="sm" dense icon="emergency"
                       label="Safe" />
@@ -106,7 +124,7 @@
                   </q-td>
                 </template>
 
-                <template #body-cell-actions="props">
+                <template v-if="!isMobile" #body-cell-actions="props">
                   <q-td :props="props" class="text-right">
                     <div class="row q-gutter-xs justify-end no-wrap">
                       <q-btn flat round color="primary" icon="my_location" size="sm"
@@ -123,6 +141,41 @@
                     </div>
                   </q-td>
                 </template>
+
+                <!-- Mobile: card -->
+                <template v-if="isMobile" #item="props">
+                  <div class="col-12">
+                    <q-card class="q-mb-sm">
+                      <q-card-section class="q-pb-sm">
+                        <div class="row items-start">
+                          <div class="col">
+                            <div class="text-subtitle1 text-weight-bold">
+                              {{ props.row.name }}
+                            </div>
+                            <div class="text-caption text-grey-7 q-mt-xs">
+                              Lat: {{ fmt5(props.row.lat) }} | Lng: {{ fmt5(props.row.lng) }}
+                            </div>
+                          </div>
+
+                          <div class="col-auto">
+                            <q-chip v-if="props.row.isSafeZone" color="negative" text-color="white" dense
+                              icon="emergency" label="Safe" />
+                            <q-chip v-else color="grey-3" text-color="grey-8" dense label="-" />
+                          </div>
+                        </div>
+                      </q-card-section>
+
+                      <q-separator />
+
+                      <q-card-actions align="right" class="q-pa-sm">
+                        <q-btn flat color="primary" icon="my_location" label="ไปที่นี่"
+                          @click="flyToMarker(props.row)" />
+                        <q-btn flat color="orange" icon="edit" label="แก้ไข" @click="confirmEdit(props.row.name)" />
+                        <q-btn flat color="negative" icon="delete" label="ลบ" @click="confirmDelete(props.row.name)" />
+                      </q-card-actions>
+                    </q-card>
+                  </div>
+                </template>
               </q-table>
             </q-card-section>
           </q-card>
@@ -130,15 +183,16 @@
 
         <!-- Rename Dialog -->
         <q-dialog v-model="editDialogOpen" persistent>
-          <q-card style="min-width: 350px; border-radius: 12px; overflow: hidden;">
+          <q-card :style="dialogStyle">
             <q-card-section class="bg-primary text-white q-pa-md">
               <div class="text-h6 text-weight-bold">แก้ไขชื่อสถานที่</div>
             </q-card-section>
 
             <q-card-section class="q-pt-lg q-gutter-y-md">
-              <q-input v-model="newPlaceName" label="ชื่อสถานที่ใหม่" outlined dense autofocus
+              <q-input v-model="newPlaceName" label="ชื่อสถานที่ใหม่" outlined :dense="isMobile" autofocus
                 @keyup.enter="handleRename" :rules="[val => !!String(val || '').trim() || 'กรุณากรอกชื่อสถานที่']" />
-              <q-checkbox v-model="isEditSafeZone" label="สถานะ Safe Zone (จุดปลอดภัย)" color="negative" />
+              <q-checkbox v-model="isEditSafeZone" label="สถานะ Safe Zone (จุดปลอดภัย)" color="negative"
+                :dense="isMobile" />
             </q-card-section>
 
             <q-card-actions align="right" class="text-primary q-pb-md q-px-md">
@@ -170,8 +224,8 @@ const $q = useQuasar();
 // State
 // -----------------------------
 const placeName = ref('');
-const lat = ref(null);      // number | null
-const lng = ref(null);      // number | null
+const lat = ref(null);
+const lng = ref(null);
 const isSafeZone = ref(false);
 
 const address = ref('');
@@ -183,9 +237,45 @@ const oldPlaceName = ref('');
 const newPlaceName = ref('');
 const isEditSafeZone = ref(false);
 
+// Leaflet refs
+const mapEl = ref(null);
 const map = ref(null);
 const markersLayer = ref(null);
-const markerMap = reactive({}); // { [name]: { lat, lng, isSafeZone, marker } }
+
+// { [name]: { lat, lng, isSafeZone, marker } }
+const markerMap = reactive({});
+
+// -----------------------------
+// Config
+// -----------------------------
+const initialLocations = SHARED_LOCATIONS;
+const GEOCODE_CACHE_KEY = 'longan_geocode_cache';
+const DEFAULT_VIEW = { center: [18.8, 99.0], zoom: 8 };
+
+// -----------------------------
+// Responsive (scale ตามอุปกรณ์)
+// -----------------------------
+const isMobile = computed(() => $q.screen.lt.md);
+const pagePadClass = computed(() => (isMobile.value ? 'q-pa-sm' : 'q-pa-md'));
+
+const mapHeight = computed(() => {
+  // ให้สูงพอดีจอมือถือ/แท็บเล็ต และไม่ใหญ่เกินบนเดสก์ท็อป
+  if ($q.screen.xs) return '42vh';
+  if ($q.screen.sm) return '48vh';
+  if ($q.screen.md) return '520px';
+  return '640px';
+});
+
+const dialogStyle = computed(() => {
+  return isMobile.value
+    ? 'width: 95vw; max-width: 95vw; border-radius: 12px; overflow: hidden;'
+    : 'min-width: 420px; max-width: 520px; border-radius: 12px; overflow: hidden;';
+});
+
+const visibleColumns = computed(() => {
+  // ใช้ grid card บนมือถืออยู่แล้ว (hide-header=true)
+  return isMobile.value ? ['name', 'isSafeZone', 'actions'] : ['name', 'lat', 'lng', 'isSafeZone', 'actions'];
+});
 
 // -----------------------------
 // Helpers
@@ -215,24 +305,37 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
+function fmt5(val) {
+  const n = safeNumber(val);
+  return Number.isFinite(n) ? n.toFixed(5) : '-';
+}
+function debounce(fn, wait = 150) {
+  let t = null;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
+  };
+}
 
 // -----------------------------
 // Computed
 // -----------------------------
 const markerList = computed(() => {
-  return Object.keys(markerMap).sort().map(name => ({
-    name,
-    lat: markerMap[name].lat,
-    lng: markerMap[name].lng,
-    isSafeZone: !!markerMap[name].isSafeZone,
-    marker: markerMap[name].marker
-  }));
+  return Object.keys(markerMap)
+    .sort()
+    .map((name) => ({
+      name,
+      lat: markerMap[name].lat,
+      lng: markerMap[name].lng,
+      isSafeZone: !!markerMap[name].isSafeZone,
+      marker: markerMap[name].marker
+    }));
 });
 
 const markerTableColumns = [
   { name: 'name', label: 'ชื่อสถานที่', field: 'name', align: 'left', sortable: true },
-  { name: 'lat', label: 'Latitude', field: 'lat', align: 'left', format: val => safeNumber(val).toFixed(5) },
-  { name: 'lng', label: 'Longitude', field: 'lng', align: 'left', format: val => safeNumber(val).toFixed(5) },
+  { name: 'lat', label: 'Latitude', field: 'lat', align: 'left', format: fmt5 },
+  { name: 'lng', label: 'Longitude', field: 'lng', align: 'left', format: fmt5 },
   { name: 'isSafeZone', label: 'สถานะ Safe Zone', field: 'isSafeZone', align: 'center', sortable: true },
   { name: 'actions', label: 'จัดการ', align: 'right' }
 ];
@@ -241,32 +344,25 @@ const markerTableColumns = [
 // Icons
 // -----------------------------
 const greenIcon = L.icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  shadowSize: [41, 41],
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  shadowSize: [41, 41]
 });
 
 const redIcon = L.icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  shadowSize: [41, 41],
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  shadowSize: [41, 41]
 });
 
 // -----------------------------
-// Config
-// -----------------------------
-const initialLocations = SHARED_LOCATIONS;
-const GEOCODE_CACHE_KEY = "longan_geocode_cache";
-const DEFAULT_VIEW = { center: [18.8, 99.0], zoom: 8 };
-
-// -----------------------------
-// Responsive helpers
+// Focus memory
 // -----------------------------
 const lastFocus = ref({ type: 'bounds', payload: null });
 
@@ -287,55 +383,72 @@ function getResponsivePanOffsetY() {
   return 75;
 }
 
-function focusLatLng(latlng, zoom = getResponsiveZoom(), openPopupMarker = null) {
+function focusLatLng(latlng, zoom = getResponsiveZoom(), openPopupMarker = null, opts = { animate: true }) {
   if (!map.value) return;
   const ll = Array.isArray(latlng) ? L.latLng(latlng[0], latlng[1]) : latlng;
-  map.value.flyTo(ll, zoom, { duration: 0.7 });
 
-  setTimeout(() => {
-    if (!map.value) return;
+  if (opts.animate) {
+    map.value.flyTo(ll, zoom, { duration: 0.7 });
+    setTimeout(() => {
+      if (!map.value) return;
+      if (openPopupMarker) openPopupMarker.openPopup();
+      map.value.panBy([0, -getResponsivePanOffsetY()], { animate: true });
+    }, 750);
+  } else {
+    map.value.setView(ll, zoom, { animate: false });
     if (openPopupMarker) openPopupMarker.openPopup();
-    map.value.panBy([0, -getResponsivePanOffsetY()], { animate: true });
-  }, 750);
+    map.value.panBy([0, -getResponsivePanOffsetY()], { animate: false });
+  }
 
   lastFocus.value = { type: 'point', payload: { latlng: ll } };
 }
 
-function focusBounds(bounds) {
+function focusBounds(bounds, opts = { animate: true }) {
   if (!map.value) return;
   const pad = getResponsivePadding();
-  map.value.fitBounds(bounds, { paddingTopLeft: [pad, pad], paddingBottomRight: [pad, pad] });
+  map.value.fitBounds(bounds, {
+    paddingTopLeft: [pad, pad],
+    paddingBottomRight: [pad, pad],
+    animate: !!opts.animate
+  });
   lastFocus.value = { type: 'bounds', payload: { bounds } };
 }
 
 function refocusLast() {
   if (!map.value || !lastFocus.value?.payload) return;
+
   if (lastFocus.value.type === 'point') {
-    focusLatLng(lastFocus.value.payload.latlng, getResponsiveZoom());
-  } else {
-    focusBounds(lastFocus.value.payload.bounds);
+    focusLatLng(lastFocus.value.payload.latlng, getResponsiveZoom(), null, { animate: false });
+  } else if (lastFocus.value.type === 'bounds' && lastFocus.value.payload?.bounds) {
+    focusBounds(lastFocus.value.payload.bounds, { animate: false });
   }
 }
 
 // -----------------------------
-// Map utilities
+// Map sizing utilities
 // -----------------------------
 function invalidateLeafletSize() {
   if (!map.value) return;
-  setTimeout(() => {
-    try { map.value?.invalidateSize(); } catch { }
-  }, 60);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      try {
+        map.value?.invalidateSize({ animate: false });
+      } catch { }
+    });
+  });
 }
 
-let resizeTimer = null;
-function onWindowResize() {
-  clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => {
-    invalidateLeafletSize();
-    setTimeout(() => refocusLast(), 80);
-  }, 150);
-}
+const onMapContainerResize = debounce(({ width, height }) => {
+  if (!map.value) return;
+  if (!width || !height) return;
 
+  invalidateLeafletSize();
+  setTimeout(() => refocusLast(), 60);
+}, 120);
+
+// -----------------------------
+// Map lifecycle
+// -----------------------------
 function destroyMap() {
   if (!map.value) return;
   try {
@@ -347,7 +460,9 @@ function destroyMap() {
 }
 
 function clearAllMarkers() {
-  try { markersLayer.value?.clearLayers(); } catch { }
+  try {
+    markersLayer.value?.clearLayers();
+  } catch { }
   for (const key of Object.keys(markerMap)) delete markerMap[key];
 }
 
@@ -368,7 +483,7 @@ async function loadMarkers() {
     clearAllMarkers();
 
     if (markers.length > 0) {
-      markers.forEach(loc => {
+      markers.forEach((loc) => {
         const name = normalizeName(loc.name);
         const latitude = safeNumber(loc.lat);
         const longitude = safeNumber(loc.lng);
@@ -377,29 +492,32 @@ async function loadMarkers() {
         addOrUpdateMarker(name, latitude, longitude, safe, false, false);
       });
     } else {
-      initialLocations.forEach(loc => addOrUpdateMarker(loc.name, loc.lat, loc.lng, false, false, false));
+      initialLocations.forEach((loc) => addOrUpdateMarker(loc.name, loc.lat, loc.lng, false, false, false));
     }
   } catch (error) {
     console.error('Failed to fetch markers:', error);
 
     clearAllMarkers();
-    initialLocations.forEach(loc => addOrUpdateMarker(loc.name, loc.lat, loc.lng, false, false, false));
+    initialLocations.forEach((loc) => addOrUpdateMarker(loc.name, loc.lat, loc.lng, false, false, false));
 
     $q.notify({ color: 'warning', message: 'โหลดข้อมูลจากฐานข้อมูลไม่สำเร็จ ใช้ค่าเริ่มต้นแทน', icon: 'warning' });
   } finally {
     isLoadingMarkers.value = false;
-    setTimeout(() => fitMapToAllMarkers(), 80);
+    setTimeout(() => {
+      invalidateLeafletSize();
+      fitMapToAllMarkers();
+    }, 80);
   }
 }
 
 async function initMap() {
   if (map.value) destroyMap();
 
-  map.value = markRaw(L.map("map").setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom));
+  map.value = markRaw(L.map(mapEl.value).setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom));
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map.value);
 
   markersLayer.value = markRaw(L.layerGroup()).addTo(map.value);
@@ -407,7 +525,13 @@ async function initMap() {
   map.value.on('click', (e) => {
     lat.value = Number(e.latlng.lat.toFixed(6));
     lng.value = Number(e.latlng.lng.toFixed(6));
-    $q.notify({ color: 'info', message: `เลือกพิกัด: ${lat.value}, ${lng.value}`, icon: 'add_location', timeout: 1500, position: 'bottom-right' });
+    $q.notify({
+      color: 'info',
+      message: `เลือกพิกัด: ${lat.value}, ${lng.value}`,
+      icon: 'add_location',
+      timeout: 1500,
+      position: 'bottom-right'
+    });
   });
 
   invalidateLeafletSize();
@@ -421,12 +545,13 @@ async function reloadMarkers() {
 }
 
 // -----------------------------
-// Marker logic (no window handlers)
+// Marker logic
 // -----------------------------
 function addOrUpdateMarker(name, latitude, longitude, isSafeZoneVal = false, flyTo = false, doFit = true) {
   const key = normalizeName(name);
   const latN = safeNumber(latitude);
   const lngN = safeNumber(longitude);
+
   if (!key || !Number.isFinite(latN) || !Number.isFinite(lngN) || !markersLayer.value) return;
 
   const safe = toBool(isSafeZoneVal);
@@ -445,7 +570,6 @@ function addOrUpdateMarker(name, latitude, longitude, isSafeZoneVal = false, fly
 
     marker.bindPopup(createPopupContent(key, latN, lngN, safe));
 
-    // attach button handlers when popup opens
     marker.on('popupopen', (evt) => {
       const container = evt.popup.getElement();
       if (!container) return;
@@ -453,17 +577,13 @@ function addOrUpdateMarker(name, latitude, longitude, isSafeZoneVal = false, fly
       const editBtn = container.querySelector('[data-action="edit"]');
       const delBtn = container.querySelector('[data-action="delete"]');
 
-      if (editBtn) {
-        editBtn.onclick = () => confirmEdit(key);
-      }
-      if (delBtn) {
-        delBtn.onclick = () => confirmDelete(key);
-      }
+      if (editBtn) editBtn.onclick = () => confirmEdit(key);
+      if (delBtn) delBtn.onclick = () => confirmDelete(key);
     });
 
-    marker.on("mouseover", () => marker.openPopup());
-    marker.on("mouseout", () => marker.closePopup());
-    marker.on("click", () => {
+    marker.on('mouseover', () => marker.openPopup());
+    marker.on('mouseout', () => marker.closePopup());
+    marker.on('click', () => {
       marker.openPopup();
       flyToMarker({ lat: latN, lng: lngN, marker });
     });
@@ -472,10 +592,10 @@ function addOrUpdateMarker(name, latitude, longitude, isSafeZoneVal = false, fly
   }
 
   if (doFit) fitMapToAllMarkers();
-  if (flyTo && map.value) focusLatLng([latN, lngN], getResponsiveZoom(), markerMap[key]?.marker);
+  if (flyTo && map.value) focusLatLng([latN, lngN], getResponsiveZoom(), markerMap[key]?.marker, { animate: true });
 }
 
-function createPopupContent(name, lat, lng, isSafeZoneVal) {
+function createPopupContent(name, latV, lngV, isSafeZoneVal) {
   const safeName = escapeHtml(name);
   return `
     <div class="custom-popup">
@@ -484,9 +604,9 @@ function createPopupContent(name, lat, lng, isSafeZoneVal) {
         ${isSafeZoneVal ? '<span style="color:red;margin-left:5px;">(Safe Zone)</span>' : ''}
       </div>
       <div style="font-size:12px;color:#666;margin-bottom:8px;">
-        Lat: ${lat.toFixed(6)}<br/>Lng: ${lng.toFixed(6)}
+        Lat: ${Number(latV).toFixed(6)}<br/>Lng: ${Number(lngV).toFixed(6)}
       </div>
-      <div class="row q-gutter-xs">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button data-action="edit"
           class="q-btn q-btn-item non-selectable no-outline q-btn--flat q-btn--rectangle text-primary q-focusable q-hoverable q-btn--dense"
           style="font-size:11px;padding:4px 8px;min-height:unset;">
@@ -512,20 +632,21 @@ function createPopupContent(name, lat, lng, isSafeZoneVal) {
 function fitMapToAllMarkers() {
   if (!map.value) return;
   const list = Object.values(markerMap);
+
   if (list.length === 0) {
-    map.value.setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom);
+    map.value.setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom, { animate: false });
     lastFocus.value = { type: 'bounds', payload: null };
     return;
   }
 
-  const group = L.featureGroup(list.map(m => m.marker));
+  const group = L.featureGroup(list.map((m) => m.marker));
   const bounds = group.getBounds();
 
   if (list.length === 1) {
     const only = list[0];
-    focusLatLng([only.lat, only.lng], getResponsiveZoom(), only.marker);
+    focusLatLng([only.lat, only.lng], getResponsiveZoom(), only.marker, { animate: true });
   } else {
-    focusBounds(bounds);
+    focusBounds(bounds, { animate: true });
   }
 }
 
@@ -542,19 +663,11 @@ async function handleAddMarker() {
     return;
   }
 
-  const markerData = {
-    name,
-    lat: latN,
-    lng: lngN,
-    isSafeZone: !!isSafeZone.value, // ✅ ส่ง boolean ตรง ๆ
-  };
+  const markerData = { name, lat: latN, lng: lngN, isSafeZone: !!isSafeZone.value };
 
   try {
     await api.post('/api/markers', markerData);
-
-    // update local immediately
     addOrUpdateMarker(markerData.name, markerData.lat, markerData.lng, markerData.isSafeZone, true, true);
-
     $q.notify({ color: 'positive', message: `บันทึก "${name}" เรียบร้อยแล้ว`, icon: 'check_circle' });
   } catch (error) {
     console.error('Error saving marker:', error);
@@ -566,6 +679,8 @@ async function handleAddMarker() {
 
 function confirmEdit(name) {
   const key = normalizeName(name);
+  if (!key || !markerMap[key]) return;
+
   oldPlaceName.value = key;
   newPlaceName.value = key;
   isEditSafeZone.value = !!markerMap[key]?.isSafeZone;
@@ -596,24 +711,16 @@ async function handleRename() {
   $q.loading.show({ message: 'กำลังบันทึกการแก้ไข...' });
 
   try {
-    const markerData = {
-      name: newNameVal,
-      lat: oldData.lat,
-      lng: oldData.lng,
-      isSafeZone: safe,
-    };
+    const markerData = { name: newNameVal, lat: oldData.lat, lng: oldData.lng, isSafeZone: safe };
 
-    // 1) upsert new (new name)
     await api.post('/api/markers', markerData);
 
-    // 2) if rename, delete old
     if (oldName !== newNameVal) {
       await api.delete(`/api/markers/${encodeURIComponent(oldName)}`);
       markersLayer.value?.removeLayer(oldData.marker);
       delete markerMap[oldName];
     }
 
-    // 3) update local
     addOrUpdateMarker(markerData.name, markerData.lat, markerData.lng, markerData.isSafeZone, false, true);
 
     $q.notify({ color: 'positive', message: 'บันทึกการแก้ไขเรียบร้อยแล้ว', icon: 'check_circle' });
@@ -623,11 +730,14 @@ async function handleRename() {
     $q.notify({ color: 'negative', message: 'บันทึกไม่สำเร็จ', icon: 'error' });
   } finally {
     $q.loading.hide();
+    invalidateLeafletSize();
   }
 }
 
 function confirmDelete(name) {
   const key = normalizeName(name);
+  if (!key) return;
+
   $q.dialog({
     title: 'ยืนยันการลบ',
     message: `คุณต้องการลบตำแหน่ง "${key}" ใช่หรือไม่?`,
@@ -671,7 +781,7 @@ function resetForm() {
 }
 
 function flyToMarker(item) {
-  focusLatLng([item.lat, item.lng], getResponsiveZoom(), item.marker);
+  focusLatLng([item.lat, item.lng], getResponsiveZoom(), item.marker, { animate: true });
 }
 
 // -----------------------------
@@ -692,8 +802,9 @@ async function handleGeocode() {
     } else {
       lat.value = Number(result.lat.toFixed(6));
       lng.value = Number(result.lng.toFixed(6));
+
       const z = $q.screen.xs ? 15 : 16;
-      focusLatLng([result.lat, result.lng], z);
+      focusLatLng([result.lat, result.lng], z, null, { animate: true });
 
       $q.notify({ color: 'positive', message: 'พบตำแหน่งแล้ว', icon: 'check' });
     }
@@ -711,24 +822,28 @@ async function geocodeAddress(addr) {
   try {
     const stored = localStorage.getItem(GEOCODE_CACHE_KEY);
     if (stored) cache = JSON.parse(stored) || {};
-  } catch { cache = {}; }
+  } catch {
+    cache = {};
+  }
 
   if (cache[addr]) return cache[addr];
 
-  const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=" + encodeURIComponent(addr);
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error("Geocoding error");
+  const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=' + encodeURIComponent(addr);
+  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error('Geocoding error');
 
   const data = await res.json();
   if (!data || data.length === 0) return null;
 
-  const lat = parseFloat(data[0].lat);
-  const lng = parseFloat(data[0].lon);
+  const latV = parseFloat(data[0].lat);
+  const lngV = parseFloat(data[0].lon);
 
-  cache[addr] = { lat, lng };
-  try { localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(cache)); } catch { }
+  cache[addr] = { lat: latV, lng: lngV };
+  try {
+    localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(cache));
+  } catch { }
 
-  return { lat, lng };
+  return { lat: latV, lng: lngV };
 }
 
 // -----------------------------
@@ -737,13 +852,10 @@ async function geocodeAddress(addr) {
 onMounted(async () => {
   await nextTick();
   await initMap();
-
-  window.addEventListener('resize', onWindowResize);
-  setTimeout(() => invalidateLeafletSize(), 250);
+  setTimeout(() => invalidateLeafletSize(), 200);
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', onWindowResize);
   destroyMap();
 });
 </script>
@@ -772,13 +884,7 @@ onBeforeUnmount(() => {
 .map-container {
   width: 100%;
   flex: 1;
-  min-height: 520px;
+  min-height: 320px;
   z-index: 1;
-}
-
-@media (max-width: 599.98px) {
-  .map-container {
-    min-height: 420px;
-  }
 }
 </style>
