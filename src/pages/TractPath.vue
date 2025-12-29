@@ -709,7 +709,18 @@ function updateUserLocation(lat, lng) {
   }
 
   if (autoRecenter.value && map.value) {
-    map.value.flyTo([lat, lng], getResponsiveZoom(), { animate: true, duration: 0.5 });
+    const center = map.value.getCenter();
+    const dist = center.distanceTo([lat, lng]);
+
+    // Only move map if user moved > 2 meters from center to prevent jitter
+    if (dist > 2) {
+      // Use panTo for smoother small movements, flyTo for start/large jumps
+      if (dist < 100) {
+        map.value.panTo([lat, lng], { animate: true, duration: 1.0, easeLinearity: 0.25 });
+      } else {
+        map.value.flyTo([lat, lng], getResponsiveZoom(), { animate: true, duration: 1.5 });
+      }
+    }
   }
 
   if (selectedDestination.value && map.value) {
