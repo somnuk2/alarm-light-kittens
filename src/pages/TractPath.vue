@@ -676,11 +676,22 @@ function startTracking() {
       updateUserLocation(latitude, longitude);
     },
     (err) => {
-      console.error(err);
+      console.error('GPS Error Details:', err);
       geoLoading.value = false;
-      $q.notify?.({ type: 'negative', message: err?.message ? `GPS Error: ${err.message}` : 'GPS Error' });
+      let msg = 'GPS Error';
+      if (err.code === 1) msg = '❌ กรุณาอนุญาตให้เข้าถึงตำแหน่ง (Permission Denied)';
+      else if (err.code === 2) msg = '❌ ไม่สามารถระบุตำแหน่งได้ (Position Unavailable)';
+      else if (err.code === 3) msg = '❌ การค้นหาตำแหน่งล่วงเวลา (Timeout)';
+      else if (err.message) msg = `GPS Error: ${err.message}`;
+
+      $q.notify?.({
+        type: 'negative',
+        message: msg,
+        caption: `Code: ${err.code || 'unknown'}`,
+        timeout: 5000
+      });
     },
-    { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 } // Increased timeout to 15s
   );
 }
 
@@ -837,7 +848,7 @@ async function updateNavigation() {
   isLoading.value = true;
   try {
     const res = await buildRouteHybrid(currentLocation.value, selectedDestination.value);
-    if (!res) {
+    if (!res || !res.polyline || res.polyline.length === 0) {
       $q.notify?.({ type: 'warning', message: 'ไม่พบเส้นทางไปยังจุดหมาย' });
       return;
     }
@@ -845,11 +856,11 @@ async function updateNavigation() {
     drawRoutePolyline(res.polyline, currentLocation.value, res.polyline[0]);
     currentRoutePolyline = res.polyline;
 
-    totalStats.distance = Math.round(res.totalDistance);
+    totalStats.distance = Math.round(res.totalDistance || 0);
 
-    totalStats.time = Math.round(res.totalTime);
-    remainingStats.distance = Math.round(res.totalDistance);
-    remainingStats.time = Math.round(res.totalTime);
+    totalStats.time = Math.round(res.totalTime || 0);
+    remainingStats.distance = Math.round(res.totalDistance || 0);
+    remainingStats.time = Math.round(res.totalTime || 0);
 
     instructions.value = res.instructions || [];
     stepPoints.value = res.stepPoints || [];
@@ -1064,8 +1075,13 @@ function findNearestNode(lat, lng) {
   let minDist = Infinity;
   const userLL = L.latLng(lat, lng);
 
-  for (const name in nodesGraph.value) {
-    const n = nodesGraph.value[name];
+  const entries = Object.entries(nodesGraph.value);
+  if (entries.length === 0) {
+    console.warn('findNearestNode: nodesGraph is empty');
+    return { node: null, distance: 0 };
+  }
+
+  for (const [name, n] of entries) {
     const d = userLL.distanceTo(L.latLng(n.lat, n.lng));
     if (d < minDist) { minDist = d; nearest = name; }
   }
